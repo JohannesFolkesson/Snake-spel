@@ -56,49 +56,66 @@ export class Game {
 
         const snake = this.snakes[0];
 
-        snake.move();
+        const nextHead = snake.getNextHeadPosition();
 
-        const head = snake.getHead()
+                // Debug: visa rörelse och kontrollflöde
+                console.debug("tick:", {
+                    direction: snake.direction,
+                    nextDirection: snake.nextDirection,
+                    head: snake.getHead(),
+                    nextHead,
+                    growSegments: snake.growSegments,
+                    segments: snake.segments
+                });
 
-        if(!this.board.isInside(head)) {
-
+        if(!this.board.isInside(nextHead)) {
+            console.warn("Death: out-of-bounds", { nextHead, board: { w: this.board.width, h: this.board.height } });
             this.handleDeath();
             return; 
         }
 
-      if (snake.hasSelfCollision()) {
-      this.handleDeath();                  // Hantera död
-      return;
-    }
+        // Om ormen inte växer denna tick kommer svansen att tas bort.
+        // Tillåt att flytta in på svansens nuvarande cell i detta fall.
+        const bodyToCheck = (snake.growSegments > 0)
+            ? snake.segments
+            : snake.segments.slice(0, snake.segments.length - 1);
 
-    if (head.x === this.food.x && head.y === this.food.y) {
-      snake.grow();                        
-      this.score = snake.getLength();  
+        if (bodyToCheck.some(seg => seg.x === nextHead.x && seg.y === nextHead.y)) {
+            console.warn("Death: self-collision", { nextHead, bodyToCheck });
+            this.handleDeath();
+            return;
+        }
 
-      this.food = this.board.getRandomEmptyCell(this.snakes);
-    }
+        snake.move(nextHead);
 
-    if (this.onRender) {
-      this.onRender(this.getState());
+        const head = snake.getHead();
+
+        if (head.x === this.food.x && head.y === this.food.y) {
+            snake.grow();                        
+            this.score = snake.getLength();  
+
+            this.food = this.board.getRandomEmptyCell(this.snakes);
+        }
+
+        if (this.onRender) {
+            this.onRender();
+        }
     }
-  }
 
   handleDeath() {
+    this.snakes[0].alive = false;
     this.state = "gameover"; 
     this.stop();
 
-    const newStart = this.board.getRandomEmptyCell();
-    this.snakes[0].reset(newStart);
-
     if (this.onRender) {
-      this.onRender(this.getState());
+      this.onRender();
     }
   }
 
   getState() {
     return {
       state: this.state, 
-      snakes: this.snakes.map(s => s.segments),
+      snakes: this.snakes,
       food: this.food,
       score: this.score
     };

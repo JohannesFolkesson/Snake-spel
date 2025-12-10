@@ -1,6 +1,6 @@
 import { Game } from "./game.js"
 
-const canvas =  document.getElementById(gameCanvas)
+const canvas =  document.getElementById("gameCanvas")
 const ctx = canvas.getContext("2d")
 
 const CELL_SIZE = 20;
@@ -12,14 +12,19 @@ const startBtn = document.getElementById("startBtn")
 
 const resetBtn = document.getElementById('resetBtn')
 
+// Härled brädans dimensioner från canvas och cellstorlek
+const GRID_WIDTH = Math.floor(canvas.width / CELL_SIZE);
+const GRID_HEIGHT = Math.floor(canvas.height / CELL_SIZE);
+
 const game = new Game({
-    width: 20,
-    height: 20,
-    tickrate: 120,
-    onRender: render
+  width: GRID_WIDTH,
+  height: GRID_HEIGHT,
+  tickRate: 120,
+  onRender: render
 })
 
-function render(state) {
+function render() {
+    const state = game.getState();
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     ctx.fillStyle = "#111";
@@ -52,51 +57,35 @@ function drawCell(x, y) {
 
   ctx.fillRect(
     x * CELL_SIZE,    
-    // X-position i pixlar
-
     y * CELL_SIZE,    
-    // Y-position i pixlar
-
     CELL_SIZE - 2,    
-    // Bredd på rutan (lite mellanrum)
-
     CELL_SIZE - 2     
-    // Höjd på rutan (lite mellanrum)
   );
 }
 
-// ----- Tangentbord -----
+
 window.addEventListener("keydown", e => {
-// Lyssnar på tangenttryckningar
+  const snake = game.snakes[0];
 
-  const snake = game.snakes[0]; 
-  // Hämtar ormen
+  // Starta spelet vid första riktningsinput när spelet är idle
+  const wasIdle = game.state === "idle";
 
-  if (e.key === "ArrowUp") snake.setDirection("UP");     
-  // Om pil upp trycks
-
-  if (e.key === "ArrowDown") snake.setDirection("DOWN"); 
-  // Om pil ner trycks
-
-  if (e.key === "ArrowLeft") snake.setDirection("LEFT"); 
-  // Om pil vänster trycks
-
+  if (e.key === "ArrowUp") snake.setDirection("UP");
+  if (e.key === "ArrowDown") snake.setDirection("DOWN");
+  if (e.key === "ArrowLeft") snake.setDirection("LEFT");
   if (e.key === "ArrowRight") snake.setDirection("RIGHT");
-  // Om pil höger trycks
+
+  if (wasIdle && ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
+    game.start();
+  }
 });
 
-// ----- Knappar -----
-startBtn.addEventListener("click", () => game.start());  
-// När du klickar "Starta", startar spelet
 
+startBtn.addEventListener("click", () => game.start());  
 resetBtn.addEventListener("click", () => {
   game.reset();                     
-  // Återställer spelet
 
-  render(game.getState());          
-  // Ritar om direkt
+  render();          
 });
 
-// Första render så något syns direkt
-render(game.getState());             
-// Ritar startläget direkt när sidan laddas
+render();             

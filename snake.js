@@ -1,9 +1,17 @@
 export class Snake {
   constructor({ id, startPosition, direction = "RIGHT", color = "lime" }) {
     this.id = id;
+    
+    // Skapa andra segmentet baserat på riktning (bakom huvudet)
+    let secondSegment = { ...startPosition };
+    if (direction === "RIGHT") secondSegment.x -= 1;
+    if (direction === "LEFT") secondSegment.x += 1;
+    if (direction === "DOWN") secondSegment.y -= 1;
+    if (direction === "UP") secondSegment.y += 1;
+    
     this.segments = [
       { ...startPosition },
-      { x: startPosition.x - 1, y: startPosition.y }
+      secondSegment
     ];
     this.direction = direction;
     this.nextDirection = direction;
@@ -20,6 +28,7 @@ export class Snake {
       RIGHT: "LEFT"
     };
 
+    // Tillåt bara om det inte är motsatt riktning
     if (newDir !== opposite[this.direction]) {
       this.nextDirection = newDir;
     }
@@ -42,9 +51,11 @@ export class Snake {
   }
 
 
-  move() {
+  move(newHead = null) {
     this.direction = this.nextDirection;
-    const newHead = this.getNextHeadPosition();
+    if (!newHead) {
+      newHead = this.getNextHeadPosition();
+    }
     this.segments.unshift(newHead);
 
     if (this.growSegments > 0) {
