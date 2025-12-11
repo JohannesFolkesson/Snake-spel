@@ -12,7 +12,7 @@ const startBtn = document.getElementById("startBtn")
 
 const resetBtn = document.getElementById('resetBtn')
 
-// Härled brädans dimensioner från canvas och cellstorlek
+// Derive board dimensions from canvas and cell size
 const GRID_WIDTH = Math.floor(canvas.width / CELL_SIZE);
 const GRID_HEIGHT = Math.floor(canvas.height / CELL_SIZE);
 
@@ -43,13 +43,10 @@ function render() {
   });
 
     statusDiv.innerText = `Status: ${state.state}`; 
-    scoreDiv.innerText = `Poäng: ${state.score}`;   
+    scoreDiv.innerText = `Score: ${state.score}`;   
 
   if (state.state === "gameover") {   
-    ctx.fillStyle = "white";          
-    ctx.font = "30px Arial";          
-
-    ctx.fillText("GAME OVER", 90, 200); 
+    showGameOver(state.score);
   }
 }
 
@@ -67,8 +64,8 @@ function drawCell(x, y) {
 window.addEventListener("keydown", e => {
   const snake = game.snakes[0];
 
-  // Starta spelet vid första riktningsinput när spelet är idle
-  const wasIdle = game.state === "idle";
+  // Start the game on first direction input when the game is waiting
+  const wasIdle = game.state === "Waiting";
 
   if (e.key === "ArrowUp") snake.setDirection("UP");
   if (e.key === "ArrowDown") snake.setDirection("DOWN");
@@ -81,11 +78,31 @@ window.addEventListener("keydown", e => {
 });
 
 
+const gameOverPopup = document.getElementById("gameOverPopup");
+const finalScoreDiv = document.getElementById("finalScore");
+const playAgainBtn = document.getElementById("playAgainBtn");
+
+function showGameOver(score) {
+  finalScoreDiv.innerText = `Final Score: ${score}`;
+  gameOverPopup.style.display = "flex";
+}
+
+function hideGameOver() {
+  gameOverPopup.style.display = "none";
+}
+
 startBtn.addEventListener("click", () => game.start());  
 resetBtn.addEventListener("click", () => {
   game.reset();                     
-
+  hideGameOver();
   render();          
+});
+
+playAgainBtn.addEventListener("click", () => {
+  game.reset();
+  hideGameOver();
+  render();
+  game.start();
 });
 
 render();             

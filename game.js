@@ -14,7 +14,7 @@ export class Game {
         this.tickRate = tickRate;
         this.interValid = null;
 
-        this.state = "idle"
+        this.state = "Waiting"
 
         this.snakes = [
             new Snake({
@@ -30,7 +30,7 @@ export class Game {
     start() {
         if(this.interValid) return;
 
-        this.state = "running";
+        this.state = "Playing";
         this.interValid = setInterval(() => {
             this.tick();
 
@@ -43,22 +43,23 @@ export class Game {
     }
 
     reset() {
+        this.stop();
         const startPos = this.board.getRandomEmptyCell()
         this.snakes[0].reset(startPos)
 
         this.food = this.board.getRandomEmptyCell(this.snakes)
         this.score = 0;
-        this.state = "idle";
+        this.state = "Waiting";
     }
 
     tick() {
-        if(this.state !== "running") return;
+        if(this.state !== "Playing") return;
 
         const snake = this.snakes[0];
 
         const nextHead = snake.getNextHeadPosition();
 
-                // Debug: visa rörelse och kontrollflöde
+                // Debug: show movement and control flow
                 console.debug("tick:", {
                     direction: snake.direction,
                     nextDirection: snake.nextDirection,
@@ -74,8 +75,8 @@ export class Game {
             return; 
         }
 
-        // Om ormen inte växer denna tick kommer svansen att tas bort.
-        // Tillåt att flytta in på svansens nuvarande cell i detta fall.
+        // If the snake doesn't grow this tick, the tail will be removed.
+        // Allow moving into the tail's current cell in this case.
         const bodyToCheck = (snake.growSegments > 0)
             ? snake.segments
             : snake.segments.slice(0, snake.segments.length - 1);

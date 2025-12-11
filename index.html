@@ -8,14 +8,25 @@
 <body>
 
 <h1>🐍 Snake</h1>
-<div id="status">Status: idle</div>
-<div id="score">Poäng: 0</div>
+<div class="container">
+<div id="status">Status: Waiting</div>
+<div id="score">Score: 0</div>
+</div>
 
+<div style="position: relative; display: inline-block;">
 <canvas id="gameCanvas" width="1200" height="600"></canvas>
+<div id="gameOverPopup" class="game-over-popup" style="display: none;">
+  <div class="popup-content">
+    <h2>GAME OVER</h2>
+    <p id="finalScore"></p>
+    <button id="playAgainBtn">Play Again</button>
+  </div>
+</div>
+</div>
 
 <div class="buttons">
-<button id="startBtn">Starta spelet</button>
-<button id="resetBtn">Ny runda</button>
+<button id="startBtn">Start Game</button>
+<button id="resetBtn">New Round</button>
 </div>
 
 <script type="module" src="./app.js"></script>
