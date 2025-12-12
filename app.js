@@ -103,7 +103,6 @@ function drawFood(x, y) {
     ctx.fill();
   }
 
-  // Draw stem (more detailed)
   ctx.strokeStyle = "#78350f";
   ctx.lineWidth = 2.5;
   ctx.lineCap = "round";
