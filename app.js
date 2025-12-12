@@ -248,7 +248,6 @@ function drawConnectedSnake(snake) {
   const shineRadius = radius * 0.08;
   const shineOffset = radius * 0.08;
 
-  // Eye whites
   ctx.fillStyle = "#fff";
   ctx.beginPath();
   ctx.arc(eye1X, eye1Y, eyeRadius, 0, Math.PI * 2);
