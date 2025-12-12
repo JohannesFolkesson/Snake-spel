@@ -28,7 +28,6 @@ export class Snake {
       RIGHT: "LEFT"
     };
 
-    // Tillåt bara om det inte är motsatt riktning
     if (newDir !== opposite[this.direction]) {
       this.nextDirection = newDir;
     }
