@@ -243,7 +243,6 @@ function drawConnectedSnake(snake) {
     eye2X = headX + eyeOffset; eye2Y = headY + eyeDistance;
   }
 
-  // Draw eyes (optimized - removed outline for performance)
   const eyeRadius = radius * 0.35;
   const pupilRadius = radius * 0.18;
   const shineRadius = radius * 0.08;
