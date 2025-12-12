@@ -23,7 +23,7 @@ const GRID_HEIGHT = Math.floor(canvas.height / CELL_SIZE);
 const game = new Game({
   width: GRID_WIDTH,
   height: GRID_HEIGHT,
-  tickRate: 80, // Faster tick rate for smoother movement
+  tickRate: 80,
   onRender: render
 })
 
