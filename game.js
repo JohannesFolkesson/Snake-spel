@@ -15,13 +15,8 @@ export class Game {
         this.interValid = null;
 
         this.state = "Waiting"
-
-        this.snakes = [
-            new Snake({
-                id: "player1",
-                startPosition: {x: 5, y: 5}
-            })
-        ]
+        this.snakes = [];
+        this.snakesById = {};
 
         this.food = this.board.getRandomEmptyCell(this.snakes);
         this.score = 0;
@@ -44,22 +39,36 @@ export class Game {
 
     reset() {
         this.stop();
-        const startPos = this.board.getRandomEmptyCell()
-        this.snakes[0].reset(startPos)
+        for (const snake of this.snakes) {
+            const startPos = this.board.getRandomEmptyCell(this.snakes, this.food)
+            snake.reset(startPos)
+        }
 
         this.food = this.board.getRandomEmptyCell(this.snakes)
         this.score = 0;
         this.state = "Waiting";
     }
 
+    addPlayer(id, color = 'lime') {
+        const start = this.board.getRandomEmptyCell(this.snakes, this.food);
+        const snake = new Snake({ id, startPosition: start, color });
+        this.snakes.push(snake);
+        this.snakesById[id] = snake;
+        return snake;
+    }
+
+    removePlayer(id) {
+        const s = this.snakesById[id];
+        if (!s) return;
+        this.snakes = this.snakes.filter(sn => sn !== s);
+        delete this.snakesById[id];
+    }
+
     tick() {
         if(this.state !== "Playing") return;
-
-        const snake = this.snakes[0];
+        for (const snake of this.snakes) {
 
         const nextHead = snake.getNextHeadPosition();
-
-                // Debug: show movement and control flow
                 console.debug("tick:", {
                     direction: snake.direction,
                     nextDirection: snake.nextDirection,
@@ -75,8 +84,6 @@ export class Game {
             return; 
         }
 
-        // If the snake doesn't grow this tick, the tail will be removed.
-        // Allow moving into the tail's current cell in this case.
         const bodyToCheck = (snake.growSegments > 0)
             ? snake.segments
             : snake.segments.slice(0, snake.segments.length - 1);
@@ -96,6 +103,8 @@ export class Game {
             this.score = snake.getLength();  
 
             this.food = this.board.getRandomEmptyCell(this.snakes);
+        }
+
         }
 
         if (this.onRender) {

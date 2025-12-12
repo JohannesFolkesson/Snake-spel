@@ -3,7 +3,6 @@ export class Board {
         this.width = width;
         this.height = height;
 
-        
     }
 
     isInside(position) {
@@ -42,7 +41,5 @@ export class Board {
         } while(occupied.has(`${position.x},${position.y}`));
 
         return position;
-
-
     }
 }
