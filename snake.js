@@ -2,7 +2,6 @@ export class Snake {
   constructor({ id, startPosition, direction = "RIGHT", color = "lime" }) {
     this.id = id;
     
-    // Skapa andra segmentet baserat på riktning (bakom huvudet)
     let secondSegment = { ...startPosition };
     if (direction === "RIGHT") secondSegment.x -= 1;
     if (direction === "LEFT") secondSegment.x += 1;
