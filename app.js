@@ -1,4 +1,5 @@
 import { Game } from "./game.js"
+import { initHost, initJoin, listen, sendGame } from "./MultiplayerApi/multiplayer.js";
 
 const canvas =  document.getElementById("gameCanvas")
 const ctx = canvas.getContext("2d")
@@ -16,6 +17,19 @@ const scoreDiv = document.getElementById("score")
 const startBtn = document.getElementById("startBtn")
 
 const resetBtn = document.getElementById('resetBtn')
+const hostBtn = document.getElementById('hostBtn')
+const joinBtn = document.getElementById('joinBtn')
+const sessionInput = document.getElementById('sessionInput')
+const serverUrlInput = document.getElementById('serverUrlInput')
+
+// Prefill server URL from query string: ?server=ws://host:port/path
+try {
+  const params = new URLSearchParams(window.location.search);
+  const serverParam = params.get('server');
+  if (serverParam && serverUrlInput) {
+    serverUrlInput.value = serverParam;
+  }
+} catch {}
 
 const GRID_WIDTH = Math.floor(canvas.width / CELL_SIZE);
 const GRID_HEIGHT = Math.floor(canvas.height / CELL_SIZE);
@@ -26,6 +40,96 @@ const game = new Game({
   tickRate: 80,
   onRender: render
 })
+// Ensure there is a local snake so the game renders
+if (!game.snakes || game.snakes.length === 0) {
+  game.addPlayer('local', 'lime');
+}
+
+// Multiplayer state
+let clientId = 'local';
+let sessionId = null;
+let isHost = false;
+
+function withTimeout(promise, ms, onTimeoutMsg = 'Timeout') {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(onTimeoutMsg)), ms);
+    promise.then((v) => { clearTimeout(t); resolve(v); })
+           .catch((e) => { clearTimeout(t); reject(e); });
+  });
+}
+
+async function hostSession() {
+  if (isHost) return;
+  isHost = true;
+  try {
+    console.log('[MP] HostSession clicked');
+    const url = (serverUrlInput?.value?.trim()) || 'ws://localhost:8080';
+    statusDiv.innerText = `Status: Connecting ${url}...`;
+    const res = await withTimeout(initHost(url), 7000, `Socket connect timeout for ${url}`);
+    sessionId = res.sessionId;
+    clientId = 'host';
+    // Map by id
+    game.snakesById = { [clientId]: game.snakes[0] };
+    game.snakes[0].id = clientId;
+    listen(handleNetworkEvent);
+    statusDiv.innerText = `Status: Hosting ${sessionId}`;
+    if (sessionInput) sessionInput.value = sessionId;
+    console.log('[MP] Hosting OK. sessionId=', sessionId);
+  } catch (e) {
+    isHost = false;
+    console.error('Failed to host session', e);
+    statusDiv.innerText = `Status: Host failed: ${e?.message || e}`;
+    alert(`Could not host session. Check server at ${serverUrlInput?.value || 'ws://localhost:8080'}`);
+  }
+}
+
+async function joinSession(id) {
+  if (!id) return;
+  isHost = false;
+  sessionId = id;
+  clientId = `client_${Math.floor(Math.random()*100000)}`;
+  try {
+    const url = (serverUrlInput?.value?.trim()) || 'ws://localhost:8080';
+    statusDiv.innerText = `Status: Joining ${id} @ ${url}...`;
+    await withTimeout(initJoin(sessionId, { name: clientId, color: 'cyan' }, url), 7000, `Socket connect timeout for ${url}`);
+    game.snakes[0].id = clientId;
+    game.snakes[0].color = 'cyan';
+    game.snakesById = { [clientId]: game.snakes[0] };
+    listen(handleNetworkEvent);
+    statusDiv.innerText = `Status: Joined ${sessionId}`;
+    console.log('[MP] Join OK. clientId=', clientId);
+  } catch (e) {
+    console.error('Failed to join session', e);
+    statusDiv.innerText = `Status: Join failed: ${e?.message || e}`;
+    alert(`Could not join session ${id}. Check server/connectivity.`);
+  }
+}
+
+function handleNetworkEvent(event, messageId, senderId, data) {
+  if (event === 'socket_error') {
+    statusDiv.innerText = `Status: Socket error. Check server ${data?.serverUrl || ''}`;
+    console.error('[MP] Socket error', data);
+    return;
+  }
+  if (event === 'socket_close') {
+    statusDiv.innerText = `Status: Socket closed (${data?.code || ''} ${data?.reason || ''}).`;
+    console.warn('[MP] Socket closed', data);
+    return;
+  }
+  if (event === 'joined') {
+    if (!game.snakesById) game.snakesById = {};
+    if (!game.snakesById[senderId]) {
+      game.addPlayer(senderId, data?.color || 'lime');
+      render();
+    }
+  }
+  if (event === 'game') {
+    if (data?.type === 'direction') {
+      const s = game.snakesById?.[data.clientId];
+      if (s) s.setDirection(data.dir);
+    }
+  }
+}
 
 function render() {
     const state = game.getState();
@@ -346,6 +450,17 @@ window.addEventListener("keydown", e => {
   if (e.key === "ArrowLeft") snake.setDirection("LEFT");
   if (e.key === "ArrowRight") snake.setDirection("RIGHT");
 
+  // Broadcast input for multiplayer
+  const dir = (
+    e.key === 'ArrowUp' ? 'UP' :
+    e.key === 'ArrowDown' ? 'DOWN' :
+    e.key === 'ArrowLeft' ? 'LEFT' :
+    e.key === 'ArrowRight' ? 'RIGHT' : null
+  );
+  if (dir) {
+    try { sendGame({ type: 'direction', clientId, dir }); } catch {}
+  }
+
   if (wasIdle && ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
     game.start();
   }
@@ -380,3 +495,31 @@ playAgainBtn.addEventListener("click", () => {
 });
 
 render();             
+
+// Simple shortcuts: H to host, J to join
+window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === 'h') {
+    hostSession();
+  }
+  if (e.key.toLowerCase() === 'j') {
+    const id = prompt('Enter session ID to join:');
+    if (id) joinSession(id);
+  }
+});
+
+// Multiplayer buttons
+if (hostBtn) {
+  hostBtn.addEventListener('click', () => {
+    try { hostSession(); } catch (e) { console.error(e); }
+  });
+}
+if (joinBtn) {
+  joinBtn.addEventListener('click', () => {
+    const id = sessionInput?.value?.trim();
+    if (id) {
+      try { joinSession(id); } catch (e) { console.error(e); }
+    } else {
+      alert('Enter a Session ID');
+    }
+  });
+}

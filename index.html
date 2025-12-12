@@ -25,8 +25,15 @@
 </div>
 
 <div class="buttons">
-<button id="startBtn">Start Game</button>
-<button id="resetBtn">New Round</button>
+  <button id="startBtn">Start Game</button>
+  <button id="resetBtn">New Round</button>
+</div>
+
+<div class="multiplayer-panel">
+  <input id="serverUrlInput" class="mp-input" type="text" placeholder="ws://localhost:8080" />
+  <button id="hostBtn" class="mp-btn">Host Session</button>
+  <input id="sessionInput" class="mp-input" type="text" placeholder="Session ID" />
+  <button id="joinBtn" class="mp-btn">Join</button>
 </div>
 
 <script type="module" src="./app.js"></script>

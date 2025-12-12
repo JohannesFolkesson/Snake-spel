@@ -96,12 +96,31 @@ export class MultiplayerApi {
 
 		});
 
-		this.socket.addEventListener('close', () => {
+		this.socket.addEventListener('close', (event) => {
+			console.warn('WebSocket closed:', {
+				code: event.code,
+				reason: event.reason,
+				wasClean: event.wasClean
+			});
+			this.listeners.forEach((listener) => {
+				try {
+					listener('socket_close', null, null, { code: event.code, reason: event.reason, wasClean: event.wasClean });
+				} catch (e) {
+					console.error('Error in listener callback (close):', e);
+				}
+			});
 			this.socket = null;
 		});
 
-		this.socket.addEventListener('error', () => {
-			// Ingen ytterligare hantering här; spelkoden kan själv reagera på uteblivna meddelanden.
+		this.socket.addEventListener('error', (event) => {
+			console.error('WebSocket error connecting to', this.serverUrl, event);
+			this.listeners.forEach((listener) => {
+				try {
+					listener('socket_error', null, null, { serverUrl: this.serverUrl });
+				} catch (e) {
+					console.error('Error in listener callback (error):', e);
+				}
+			});
 		});
 	}
 
