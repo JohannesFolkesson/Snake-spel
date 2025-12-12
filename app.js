@@ -205,7 +205,6 @@ function drawConnectedSnake(snake) {
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
     ctx.fill();
     
-    // Add scale pattern every other segment
     if (index % 2 === 0) {
       ctx.strokeStyle = "rgba(21, 128, 61, 0.3)";
       ctx.lineWidth = 1.5;
