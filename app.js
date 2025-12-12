@@ -93,7 +93,6 @@ function drawFood(x, y) {
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
 
-  // Add texture/speckles
   ctx.fillStyle = "rgba(220, 38, 38, 0.3)";
   for (let i = 0; i < 3; i++) {
     const angle = (Math.PI * 2 / 3) * i;
