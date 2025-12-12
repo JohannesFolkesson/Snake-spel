@@ -116,7 +116,6 @@ function drawFood(x, y) {
   );
   ctx.stroke();
 
-  // Draw leaf with vein
   ctx.fillStyle = "#22c55e";
   ctx.beginPath();
   ctx.ellipse(
