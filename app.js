@@ -201,14 +201,13 @@ function handleNetworkEvent(event, messageId, senderId, data) {
   }
   if (event === 'joined') {
     // Ignore join events for ourselves to avoid duplicates
-    if (senderId === clientId) {
-      return;
-    }
-    if (senderId && !game.snakesById[senderId] && game.snakes.length < 2) {
-      // Joined player should be blue
-      game.addPlayer(senderId, 'blue');
-      render();
-    }
+      if (senderId === clientId) return;
+      if (senderId && !game.snakesById[senderId]) {
+        const snake = new Snake({ id: senderId, color: 'blue' });
+        game.snakes.push(snake);
+        game.snakesById[senderId] = snake;
+        render();
+      }
     // Deduplicate snakes by id (keep one per id)
     const seen = new Set();
     game.snakes = game.snakes.filter(s => {
