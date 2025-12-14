@@ -50,6 +50,14 @@ export class Game {
     }
 
     addPlayer(id, color = 'lime') {
+        // Prevent duplicates
+        if (this.snakesById[id]) {
+            return this.snakesById[id];
+        }
+        // Cap to max 2 players (host + one joiner)
+        if (this.snakes.length >= 2) {
+            return this.snakes[0];
+        }
         const start = this.board.getRandomEmptyCell(this.snakes, this.food);
         const snake = new Snake({ id, startPosition: start, color });
         this.snakes.push(snake);
@@ -117,10 +125,9 @@ export class Game {
         deadSnake.alive = false;
 
         // Do NOT remove snakes; keep roster for restart
-        // End the game if local snake died (assume snakes[0] is local) or if all snakes are dead
+        // End the game only if ALL snakes are dead
         const anyAlive = this.snakes.some(s => s.alive !== false);
-        const localDead = this.snakes[0] && this.snakes[0].alive === false;
-        if (localDead || !anyAlive) {
+        if (!anyAlive) {
             this.state = "gameover";
             this.stop();
         }

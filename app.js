@@ -52,15 +52,28 @@ let isHost = false;
 let activePlayerIds = new Set();
 
 function reconcileSnakes() {
-  // Keep only snakes whose id is in activePlayerIds
-  const allowed = new Set(activePlayerIds);
-  game.snakes = game.snakes.filter(s => s.id && allowed.has(s.id));
-  // Rebuild snakesById and enforce colors: host lime, others blue
+  // Always keep at most two snakes: host + one other
+  let roster = [];
+  if (isHost) {
+    // Host: prefer the host snake and the first non-host present
+    const hostSnake = game.snakesById['host'] || game.snakes.find(s => s.id === 'host') || game.snakes[0];
+    const other = game.snakes.find(s => s.id && s.id !== 'host');
+    if (hostSnake) roster.push(hostSnake);
+    if (other) roster.push(other);
+  } else {
+    // Client: keep host and our own clientId
+    const hostSnake = game.snakesById['host'] || game.snakes.find(s => s.id === 'host');
+    const meSnake = game.snakesById[clientId] || game.snakes.find(s => s.id === clientId) || game.snakes[0];
+    if (hostSnake) roster.push(hostSnake);
+    if (meSnake && (!hostSnake || meSnake.id !== hostSnake.id)) roster.push(meSnake);
+  }
+  game.snakes = roster.slice(0, 2);
+  // Rebuild snakesById and enforce colors consistently
   const map = {};
   for (const s of game.snakes) {
     if (s.id === 'host') {
       s.color = 'lime';
-    } else if (s.id !== 'host') {
+    } else {
       s.color = 'blue';
     }
     map[s.id] = s;
@@ -191,7 +204,7 @@ function handleNetworkEvent(event, messageId, senderId, data) {
     if (senderId === clientId) {
       return;
     }
-    if (senderId && !game.snakesById[senderId]) {
+    if (senderId && !game.snakesById[senderId] && game.snakes.length < 2) {
       // Joined player should be blue
       game.addPlayer(senderId, 'blue');
       render();
@@ -206,8 +219,10 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       return true;
     });
     // Ensure snakesById reflects current snakes uniquely
+    // Preserve existing active players; add new sender; cap later in reconcile
+    if (!(activePlayerIds instanceof Set)) activePlayerIds = new Set();
     activePlayerIds.add('host');
-    activePlayerIds.add(senderId);
+    if (senderId) activePlayerIds.add(senderId);
     reconcileSnakes();
     // If host, broadcast presence to sync all clients
     if (isHost) {
@@ -222,13 +237,13 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       // Host: ensure a snake exists for the announcing client
       if (!game.snakesById) game.snakesById = {};
       const pid = data?.clientId;
-      if (pid && !game.snakesById[pid]) {
+      if (pid && !game.snakesById[pid] && game.snakes.length < 2) {
         game.addPlayer(pid, data?.color || 'lime');
         render();
       }
       if (pid) {
-        activePlayerIds.add('host');
-        activePlayerIds.add(pid);
+        // Host tracks only itself and one client
+        activePlayerIds = new Set(['host', pid]);
         reconcileSnakes();
       }
       return;
@@ -241,16 +256,33 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       return;
     }
     if (data?.type === 'restart') {
-      // New round initiated by host
+      // New round initiated by host: clients reset and WAIT for input or Start Game
       try {
-        // Ensure our local snake exists
-        if (!game.snakesById) game.snakesById = {};
-        if (!game.snakesById[clientId]) {
-          game.addPlayer(clientId, isHost ? (game.snakes[0]?.color || 'lime') : 'cyan');
+        if (!isHost) {
+          if (!game.snakesById) game.snakesById = {};
+          if (!game.snakesById[clientId]) {
+            game.addPlayer(clientId, 'blue');
+          }
+          game.reset();
+          render();
+          // Do NOT auto-start; wait for arrow keys or Start Game
         }
-        game.reset();
-        render();
-        // Wait for explicit 'start' message to begin ticking
+      } catch {}
+      return;
+    }
+    if (data?.type === 'restart_and_start') {
+      // Restart and auto-start clients for a new round
+      try {
+        if (!isHost) {
+          if (!game.snakesById) game.snakesById = {};
+          if (!game.snakesById[clientId]) {
+            game.addPlayer(clientId, 'blue');
+          }
+          game.reset();
+          render();
+          // Auto-start on play again for clients
+          try { game.start(); } catch {}
+        }
       } catch {}
       return;
     }
@@ -291,13 +323,23 @@ function handleNetworkEvent(event, messageId, senderId, data) {
     }
     if (data?.type === 'presence' && Array.isArray(data.players)) {
       if (!game.snakesById) game.snakesById = {};
-      for (const pid of data.players) {
-        if (!game.snakesById[pid]) {
-          const color = pid === clientId ? (game.snakes[0]?.color || 'lime') : 'blue';
+      // Build allowed roster differently for host vs client
+      let players;
+      if (isHost) {
+        // Host keeps itself plus at most one non-host player from presence
+        const others = data.players.filter(p => p && p !== 'host');
+        players = ['host', ...others.slice(0, 1)];
+      } else {
+        // Client keeps host and itself
+        players = data.players.filter(p => p === 'host' || p === clientId).slice(0, 2);
+      }
+      for (const pid of players) {
+        if (!game.snakesById[pid] && game.snakes.length < 2) {
+          const color = pid === 'host' ? 'lime' : 'blue';
           game.addPlayer(pid, color);
         }
       }
-      activePlayerIds = new Set(data.players);
+      activePlayerIds = new Set(players);
       reconcileSnakes();
       render();
       return;
@@ -657,8 +699,8 @@ window.addEventListener("keydown", e => {
 
   const wasIdle = game.state === "Waiting";
 
-  // Only the host applies local direction immediately; clients defer to host state
-  if (isHost && snake) {
+  // Apply local direction immediately for responsiveness (host and client)
+  if (snake) {
     if (e.key === "ArrowUp") snake.setDirection("UP");
     if (e.key === "ArrowDown") snake.setDirection("DOWN");
     if (e.key === "ArrowLeft") snake.setDirection("LEFT");
@@ -677,6 +719,8 @@ window.addEventListener("keydown", e => {
     // If client pressed an arrow while idle, request start from host
     if (!isHost && game.state === 'Waiting') {
       try { sendGame({ type: 'start_request', clientId }); } catch {}
+      // Fallback: start locally to ensure control responsiveness
+      try { game.start(); } catch {}
     }
   }
 
@@ -690,6 +734,7 @@ window.addEventListener("keydown", e => {
 const gameOverPopup = document.getElementById("gameOverPopup");
 const finalScoreDiv = document.getElementById("finalScore");
 const playAgainBtn = document.getElementById("playAgainBtn");
+const closePopupBtn = document.getElementById("closePopupBtn");
 
 function showGameOver(score) {
   finalScoreDiv.innerText = `Final Score: ${score}`;
@@ -710,7 +755,7 @@ resetBtn.addEventListener("click", () => {
     game.reset();
     hideGameOver();
     render();
-    game.start();
+    // Do NOT auto-start; broadcast restart and wait for input or Start Game
     try { sendGame({ type: 'restart' }); } catch {}
   } else {
     game.reset();
@@ -719,32 +764,12 @@ resetBtn.addEventListener("click", () => {
   }
 });
 
-playAgainBtn.addEventListener("click", () => {
-  // Host coordinates a restart for all players
-  if (isHost) {
-    // Ensure snakes exist for all known player IDs
-    if (!game.snakesById) game.snakesById = {};
-    const ids = Object.keys(game.snakesById);
-    for (const id of ids) {
-      if (!game.snakesById[id]) {
-        game.addPlayer(id, 'lime');
-      }
-    }
-    game.reset();
+// Close popup: just hide overlay, no restart
+if (closePopupBtn) {
+  closePopupBtn.addEventListener("click", () => {
     hideGameOver();
-    render();
-    game.start();
-    try {
-      // Send a single combined message to reduce race conditions
-      sendGame({ type: 'restart_and_start' });
-    } catch {}
-  } else {
-    // Client waits for host restart but can locally reset to clear UI
-    game.reset();
-    hideGameOver();
-    render();
-  }
-});
+  });
+}
 
 render();             
 
@@ -784,6 +809,8 @@ function startGameSynced() {
     if (!game.snakesById[clientId]) {
       game.addPlayer(clientId, 'lime');
     }
+    // Hide game-over popup if visible
+    hideGameOver();
     game.start();
     try { sendGame({ type: 'start' }); } catch {}
   } else {
@@ -795,7 +822,19 @@ function startGameSynced() {
 if (startBtn) {
   // Overwrite any previous click handler to use synced start
   startBtn.onclick = null;
-  startBtn.addEventListener('click', startGameSynced);
+  startBtn.addEventListener('click', () => {
+    if (isHost) {
+      // Host starts both sides
+      hideGameOver();
+      startGameSynced();
+    } else {
+      // Client: start locally for responsiveness and request host to start
+      hideGameOver();
+      try { game.start(); } catch {}
+      try { sendGame({ type: 'start_request', clientId }); } catch {}
+      statusDiv.innerText = `Status: Playing${sessionId ? ` • Joined ${sessionId}` : ''}`;
+    }
+  });
 }
 
 // Also start when arrow key pressed: host only, and broadcast
