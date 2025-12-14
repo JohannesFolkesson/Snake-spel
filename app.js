@@ -162,7 +162,6 @@ function handleNetworkEvent(event, messageId, senderId, data) {
     return;
   }
   if (event === 'joined') {
-    if (!game.snakesById) game.snakesById = {};
     // Ignore join events for ourselves to avoid duplicates
     if (senderId === clientId) {
       return;
@@ -171,7 +170,7 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       game.addPlayer(senderId, data?.color || 'lime');
       render();
     }
-    // Deduplicate snakes by id (keep the one referenced in snakesById)
+    // Deduplicate snakes by id (keep one per id)
     const seen = new Set();
     game.snakes = game.snakes.filter(s => {
       const id = s.id;
@@ -206,7 +205,7 @@ function handleNetworkEvent(event, messageId, senderId, data) {
         }
         game.reset();
         render();
-        game.start();
+        // Wait for explicit 'start' message to begin ticking
       } catch {}
       return;
     }
@@ -271,6 +270,17 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       if (game.state === 'Waiting') {
         try { game.start(); } catch {}
       }
+      return;
+    }
+    if (data?.type === 'start_request' && isHost) {
+      // Client requests the host to start; host starts and broadcasts
+      try {
+        if (game.state === 'Waiting') {
+          game.start();
+          sendGame({ type: 'start' });
+        }
+      } catch {}
+      return;
     }
   }
 }
@@ -625,6 +635,10 @@ window.addEventListener("keydown", e => {
   );
   if (dir) {
     try { sendGame({ type: 'direction', clientId, dir }); } catch {}
+    // If client pressed an arrow while idle, request start from host
+    if (!isHost && game.state === 'Waiting') {
+      try { sendGame({ type: 'start_request', clientId }); } catch {}
+    }
   }
 
   // Only the host starts the game loop
@@ -647,11 +661,23 @@ function hideGameOver() {
   gameOverPopup.style.display = "none";
 }
 
-startBtn.addEventListener("click", () => game.start());  
+// Wire reset to coordinated host/client behavior
 resetBtn.addEventListener("click", () => {
-  game.reset();                     
-  hideGameOver();
-  render();          
+  if (isHost) {
+    if (!game.snakesById) game.snakesById = {};
+    if (!game.snakesById[clientId]) {
+      game.addPlayer(clientId, 'lime');
+    }
+    game.reset();
+    hideGameOver();
+    render();
+    game.start();
+    try { sendGame({ type: 'restart' }); } catch {}
+  } else {
+    game.reset();
+    hideGameOver();
+    render();
+  }
 });
 
 playAgainBtn.addEventListener("click", () => {
@@ -669,7 +695,10 @@ playAgainBtn.addEventListener("click", () => {
     hideGameOver();
     render();
     game.start();
-    try { sendGame({ type: 'restart' }); } catch {}
+    try {
+      // Send a single combined message to reduce race conditions
+      sendGame({ type: 'restart_and_start' });
+    } catch {}
   } else {
     // Client waits for host restart but can locally reset to clear UI
     game.reset();
@@ -711,6 +740,11 @@ if (joinBtn) {
 // Synchronize start across tabs: host sends start, clients follow
 function startGameSynced() {
   if (isHost) {
+    // Ensure local snake exists before starting
+    if (!game.snakesById) game.snakesById = {};
+    if (!game.snakesById[clientId]) {
+      game.addPlayer(clientId, 'lime');
+    }
     game.start();
     try { sendGame({ type: 'start' }); } catch {}
   } else {
@@ -720,7 +754,8 @@ function startGameSynced() {
 
 // Hook start button to synced start
 if (startBtn) {
-  startBtn.removeEventListener('click', () => game.start());
+  // Overwrite any previous click handler to use synced start
+  startBtn.onclick = null;
   startBtn.addEventListener('click', startGameSynced);
 }
 
