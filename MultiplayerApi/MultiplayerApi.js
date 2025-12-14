@@ -16,6 +16,7 @@ Metoder:
 export class MultiplayerApi {
 	constructor(serverUrl) {
 		this.serverUrl = serverUrl;
+		this.identifier = 'snake';
 		this.socket = null;
 		this.sessionId = null;
 		this.listeners = new Set();
@@ -82,7 +83,7 @@ export class MultiplayerApi {
 				if (this.onJoin)
 					this.onJoin(session, clientId, data);
 
-			} else if (cmd === 'joined' || cmd === 'leaved' || cmd === 'game') {
+			} else if (cmd === 'joined' || cmd === 'leaved' || cmd === 'left' || cmd === 'closed' || cmd === 'game') {
 				console.log(`Received ${cmd} command`);
 
 				this.listeners.forEach((listener) => {
@@ -135,6 +136,7 @@ export class MultiplayerApi {
 
 	_buildPayload(cmd, data) {
 		const payload = {
+			identifier: this.identifier,
 			session: this.sessionId,
 			cmd,
 			data: (data && typeof data === 'object') ? data : {}

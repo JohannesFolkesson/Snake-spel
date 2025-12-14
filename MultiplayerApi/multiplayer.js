@@ -2,13 +2,13 @@ import { MultiplayerApi } from "./MultiplayerApi.js";
 
 let api = null;
 
-export async function initHost(url = 'wss://pedrochat.se') {
+export async function initHost(url = 'wss://pedrochat.se/net') {
 	api = new MultiplayerApi(url);
-	const { sessionId } = await api.host();
-	return { api, sessionId };
+	const { session } = await api.host();
+	return { api, sessionId: session };
 }
 
-export async function initJoin(sessionId, data = {}, url = 'wss://pedrochat.se') {
+export async function initJoin(sessionId, data = {}, url = 'wss://pedrochat.se/net') {
 	api = new MultiplayerApi(url);
 	await api.join(sessionId, data);
 	return { api };

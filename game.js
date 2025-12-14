@@ -80,7 +80,7 @@ export class Game {
 
         if(!this.board.isInside(nextHead)) {
             console.warn("Death: out-of-bounds", { nextHead, board: { w: this.board.width, h: this.board.height } });
-            this.handleDeath();
+            this.handleDeath(snake);
             return; 
         }
 
@@ -90,7 +90,7 @@ export class Game {
 
         if (bodyToCheck.some(seg => seg.x === nextHead.x && seg.y === nextHead.y)) {
             console.warn("Death: self-collision", { nextHead, bodyToCheck });
-            this.handleDeath();
+            this.handleDeath(snake);
             return;
         }
 
@@ -112,15 +112,27 @@ export class Game {
         }
     }
 
-  handleDeath() {
-    this.snakes[0].alive = false;
-    this.state = "gameover"; 
-    this.stop();
+    handleDeath(deadSnake) {
+        if (!deadSnake) return;
+        deadSnake.alive = false;
+        // Remove dead snake from arrays/maps
+        this.snakes = this.snakes.filter(sn => sn !== deadSnake);
+        if (deadSnake.id && this.snakesById[deadSnake.id]) {
+            delete this.snakesById[deadSnake.id];
+        }
 
-    if (this.onRender) {
-      this.onRender();
+        // Only end the game if the local snake (assumed index 0 before removal) died
+        // or if no snakes remain
+        const localAlive = this.snakes.length > 0 && this.snakes[0].alive !== false;
+        if (!localAlive || this.snakes.length === 0) {
+            this.state = "gameover";
+            this.stop();
+        }
+
+        if (this.onRender) {
+            this.onRender();
+        }
     }
-  }
 
   getState() {
     return {

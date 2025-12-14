@@ -63,23 +63,48 @@ async function hostSession() {
   isHost = true;
   try {
     console.log('[MP] HostSession clicked');
-    const url = (serverUrlInput?.value?.trim()) || 'ws://localhost:8080';
-    statusDiv.innerText = `Status: Connecting ${url}...`;
-    const res = await withTimeout(initHost(url), 7000, `Socket connect timeout for ${url}`);
+    const entered = (serverUrlInput?.value?.trim());
+    const candidates = [
+      entered,
+      'wss://pedrochat.se/net',
+      'wss://pedrochat.se'
+    ].filter(Boolean);
+    let res = null;
+    let lastErr = null;
+    for (const url of candidates) {
+      statusDiv.innerText = `Status: Connecting ${url}...`;
+      try {
+        res = await withTimeout(initHost(url), 7000, `Socket connect timeout for ${url}`);
+        // If success, set the field to the working URL
+        if (serverUrlInput) serverUrlInput.value = url;
+        break;
+      } catch (e) {
+        lastErr = e;
+        console.warn('[MP] Host attempt failed for', url, e?.message || e);
+      }
+    }
+    if (!res) throw lastErr || new Error('No working WebSocket endpoint');
     sessionId = res.sessionId;
     clientId = 'host';
-    // Map by id
-    game.snakesById = { [clientId]: game.snakes[0] };
+    // Map by id without dropping existing mappings
+    if (!game.snakesById) game.snakesById = {};
+    game.snakesById[clientId] = game.snakes[0];
     game.snakes[0].id = clientId;
     listen(handleNetworkEvent);
     statusDiv.innerText = `Status: Hosting ${sessionId}`;
     if (sessionInput) sessionInput.value = sessionId;
     console.log('[MP] Hosting OK. sessionId=', sessionId);
+
+    // Broadcast initial presence so any joiners can sync players
+    try {
+      const players = Object.keys(game.snakesById || {});
+      sendGame({ type: 'presence', players });
+    } catch {}
   } catch (e) {
     isHost = false;
     console.error('Failed to host session', e);
     statusDiv.innerText = `Status: Host failed: ${e?.message || e}`;
-    alert(`Could not host session. Check server at ${serverUrlInput?.value || 'ws://localhost:8080'}`);
+    alert(`Could not host session. Check server URL/path and try again.`);
   }
 }
 
@@ -89,19 +114,39 @@ async function joinSession(id) {
   sessionId = id;
   clientId = `client_${Math.floor(Math.random()*100000)}`;
   try {
-    const url = (serverUrlInput?.value?.trim()) || 'ws://localhost:8080';
-    statusDiv.innerText = `Status: Joining ${id} @ ${url}...`;
-    await withTimeout(initJoin(sessionId, { name: clientId, color: 'cyan' }, url), 7000, `Socket connect timeout for ${url}`);
+    const entered = (serverUrlInput?.value?.trim());
+    const candidates = [
+      entered,
+      'wss://pedrochat.se/net',
+      'wss://pedrochat.se'
+    ].filter(Boolean);
+    let lastErr = null;
+    for (const url of candidates) {
+      statusDiv.innerText = `Status: Joining ${id} @ ${url}...`;
+      try {
+        await withTimeout(initJoin(sessionId, { name: clientId, color: 'cyan' }, url), 7000, `Socket connect timeout for ${url}`);
+        if (serverUrlInput) serverUrlInput.value = url;
+        break;
+      } catch (e) {
+        lastErr = e;
+        console.warn('[MP] Join attempt failed for', url, e?.message || e);
+      }
+    }
+    if (lastErr) throw lastErr;
     game.snakes[0].id = clientId;
     game.snakes[0].color = 'cyan';
-    game.snakesById = { [clientId]: game.snakes[0] };
+    if (!game.snakesById) game.snakesById = {};
+    game.snakesById[clientId] = game.snakes[0];
     listen(handleNetworkEvent);
     statusDiv.innerText = `Status: Joined ${sessionId}`;
     console.log('[MP] Join OK. clientId=', clientId);
+
+    // Request presence from host to ensure we sync player list
+    try { sendGame({ type: 'presence_request', clientId }); } catch {}
   } catch (e) {
     console.error('Failed to join session', e);
     statusDiv.innerText = `Status: Join failed: ${e?.message || e}`;
-    alert(`Could not join session ${id}. Check server/connectivity.`);
+    alert(`Could not join session ${id}. Check server URL/path and try again.`);
   }
 }
 
@@ -118,15 +163,114 @@ function handleNetworkEvent(event, messageId, senderId, data) {
   }
   if (event === 'joined') {
     if (!game.snakesById) game.snakesById = {};
-    if (!game.snakesById[senderId]) {
+    // Ignore join events for ourselves to avoid duplicates
+    if (senderId === clientId) {
+      return;
+    }
+    if (senderId && !game.snakesById[senderId]) {
       game.addPlayer(senderId, data?.color || 'lime');
       render();
     }
+    // Deduplicate snakes by id (keep the one referenced in snakesById)
+    const seen = new Set();
+    game.snakes = game.snakes.filter(s => {
+      const id = s.id;
+      if (!id) return false; // drop snakes without id
+      if (seen.has(id)) return false; // drop duplicates
+      seen.add(id);
+      return true;
+    });
+    // If host, broadcast presence to sync all clients
+    if (isHost) {
+      try {
+        const players = Object.keys(game.snakesById || {});
+        sendGame({ type: 'presence', players });
+      } catch {}
+    }
   }
   if (event === 'game') {
+    if (data?.type === 'start') {
+      // Client starts when host broadcasts start
+      if (!isHost && game.state === 'Waiting') {
+        try { game.start(); } catch {}
+      }
+      return;
+    }
+    if (data?.type === 'restart') {
+      // New round initiated by host
+      try {
+        // Ensure our local snake exists
+        if (!game.snakesById) game.snakesById = {};
+        if (!game.snakesById[clientId]) {
+          game.addPlayer(clientId, isHost ? (game.snakes[0]?.color || 'lime') : 'cyan');
+        }
+        game.reset();
+        render();
+        game.start();
+      } catch {}
+      return;
+    }
+    if (data?.type === 'state' && !isHost) {
+      const snapshot = data;
+      if (!game.snakesById) game.snakesById = {};
+      // Sync snakes
+      const ids = new Set();
+      for (const sn of (snapshot.snakes || [])) {
+        ids.add(sn.id);
+        let s = game.snakesById[sn.id];
+        if (!s) {
+          game.addPlayer(sn.id, sn.color || 'lime');
+          s = game.snakesById[sn.id];
+        }
+        // Replace segments and direction
+        s.segments = sn.segments.map(seg => ({ x: seg.x, y: seg.y }));
+        s.direction = sn.direction || s.direction;
+        s.nextDirection = sn.nextDirection || s.direction;
+        s.color = sn.color || s.color;
+        s.alive = sn.alive !== false;
+      }
+      // Remove snakes not in snapshot
+      game.snakes = game.snakes.filter(s => ids.has(s.id));
+      for (const id in game.snakesById) {
+        if (!ids.has(id)) delete game.snakesById[id];
+      }
+      // Sync food and score
+      if (snapshot.food) game.food = { x: snapshot.food.x, y: snapshot.food.y };
+      if (typeof snapshot.score === 'number') game.score = snapshot.score;
+      // Ensure rendering
+      render();
+      return;
+    }
+    if (data?.type === 'presence_request' && isHost) {
+      try {
+        const players = Object.keys(game.snakesById || {});
+        sendGame({ type: 'presence', players });
+      } catch {}
+      return;
+    }
+    if (data?.type === 'presence' && Array.isArray(data.players)) {
+      if (!game.snakesById) game.snakesById = {};
+      for (const pid of data.players) {
+        if (!game.snakesById[pid]) {
+          game.addPlayer(pid, pid === clientId ? game.snakes[0]?.color || 'lime' : 'lime');
+        }
+      }
+      // Remove any snakes whose id is not in players (or missing id)
+      const allowed = new Set(data.players);
+      game.snakes = game.snakes.filter(s => s.id && allowed.has(s.id));
+      for (const id in game.snakesById) {
+        if (!allowed.has(id)) delete game.snakesById[id];
+      }
+      render();
+      return;
+    }
     if (data?.type === 'direction') {
       const s = game.snakesById?.[data.clientId];
       if (s) s.setDirection(data.dir);
+      // If this tab is idle, start the game so ticks run
+      if (game.state === 'Waiting') {
+        try { game.start(); } catch {}
+      }
     }
   }
 }
@@ -157,14 +301,34 @@ function render() {
    
     drawFood(state.food.x, state.food.y);
 
-    const snake = state.snakes[0];
-    drawConnectedSnake(snake);
+    // Draw all snakes (local + remote)
+    if (Array.isArray(state.snakes)) {
+      for (const s of state.snakes) {
+        drawConnectedSnake(s);
+      }
+    }
 
-    statusDiv.innerText = `Status: ${state.state}`; 
+    // Show game state plus multiplayer session info so Hosting/Joined persists
+    statusDiv.innerText = `Status: ${state.state}${sessionId ? ` • ${isHost ? 'Hosting ' + sessionId : 'Joined ' + sessionId}` : ''}`; 
     scoreDiv.innerText = `Score: ${state.score}`;   
 
     if (state.state === "gameover") {   
       showGameOver(state.score);
+    }
+
+    // Host broadcasts authoritative state so clients stay in sync
+    if (isHost) {
+      try {
+        const snakesPayload = state.snakes.map(s => ({
+          id: s.id,
+          color: s.color,
+          direction: s.direction,
+          nextDirection: s.nextDirection,
+          alive: s.alive,
+          segments: s.segments.map(seg => ({ x: seg.x, y: seg.y }))
+        }));
+        sendGame({ type: 'state', snakes: snakesPayload, food: state.food, score: state.score });
+      } catch {}
     }
 }
 
@@ -440,15 +604,17 @@ function drawTongue(headX, headY, radius, direction) {
 
 
 window.addEventListener("keydown", e => {
-  const snake = game.snakes[0];
-
+  const snake = game.snakesById?.[clientId];
 
   const wasIdle = game.state === "Waiting";
 
-  if (e.key === "ArrowUp") snake.setDirection("UP");
-  if (e.key === "ArrowDown") snake.setDirection("DOWN");
-  if (e.key === "ArrowLeft") snake.setDirection("LEFT");
-  if (e.key === "ArrowRight") snake.setDirection("RIGHT");
+  // Only the host applies local direction immediately; clients defer to host state
+  if (isHost && snake) {
+    if (e.key === "ArrowUp") snake.setDirection("UP");
+    if (e.key === "ArrowDown") snake.setDirection("DOWN");
+    if (e.key === "ArrowLeft") snake.setDirection("LEFT");
+    if (e.key === "ArrowRight") snake.setDirection("RIGHT");
+  }
 
   // Broadcast input for multiplayer
   const dir = (
@@ -461,7 +627,8 @@ window.addEventListener("keydown", e => {
     try { sendGame({ type: 'direction', clientId, dir }); } catch {}
   }
 
-  if (wasIdle && ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
+  // Only the host starts the game loop
+  if (isHost && wasIdle && snake && ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
     game.start();
   }
 });
@@ -488,10 +655,27 @@ resetBtn.addEventListener("click", () => {
 });
 
 playAgainBtn.addEventListener("click", () => {
-  game.reset();
-  hideGameOver();
-  render();
-  game.start();
+  // Host coordinates a restart for all players
+  if (isHost) {
+    // Ensure snakes exist for all known player IDs
+    if (!game.snakesById) game.snakesById = {};
+    const ids = Object.keys(game.snakesById);
+    for (const id of ids) {
+      if (!game.snakesById[id]) {
+        game.addPlayer(id, 'lime');
+      }
+    }
+    game.reset();
+    hideGameOver();
+    render();
+    game.start();
+    try { sendGame({ type: 'restart' }); } catch {}
+  } else {
+    // Client waits for host restart but can locally reset to clear UI
+    game.reset();
+    hideGameOver();
+    render();
+  }
 });
 
 render();             
@@ -523,3 +707,28 @@ if (joinBtn) {
     }
   });
 }
+
+// Synchronize start across tabs: host sends start, clients follow
+function startGameSynced() {
+  if (isHost) {
+    game.start();
+    try { sendGame({ type: 'start' }); } catch {}
+  } else {
+    // Clients rely on host 'start' broadcast; do not start here
+  }
+}
+
+// Hook start button to synced start
+if (startBtn) {
+  startBtn.removeEventListener('click', () => game.start());
+  startBtn.addEventListener('click', startGameSynced);
+}
+
+// Also start when arrow key pressed: host only, and broadcast
+window.addEventListener('keydown', (e) => {
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
+    if (isHost && game.state === 'Waiting') {
+      startGameSynced();
+    }
+  }
+});
