@@ -115,16 +115,12 @@ export class Game {
     handleDeath(deadSnake) {
         if (!deadSnake) return;
         deadSnake.alive = false;
-        // Remove dead snake from arrays/maps
-        this.snakes = this.snakes.filter(sn => sn !== deadSnake);
-        if (deadSnake.id && this.snakesById[deadSnake.id]) {
-            delete this.snakesById[deadSnake.id];
-        }
 
-        // Only end the game if the local snake (assumed index 0 before removal) died
-        // or if no snakes remain
-        const localAlive = this.snakes.length > 0 && this.snakes[0].alive !== false;
-        if (!localAlive || this.snakes.length === 0) {
+        // Do NOT remove snakes; keep roster for restart
+        // End the game if local snake died (assume snakes[0] is local) or if all snakes are dead
+        const anyAlive = this.snakes.some(s => s.alive !== false);
+        const localDead = this.snakes[0] && this.snakes[0].alive === false;
+        if (localDead || !anyAlive) {
             this.state = "gameover";
             this.stop();
         }

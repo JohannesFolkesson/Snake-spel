@@ -49,6 +49,24 @@ if (!game.snakes || game.snakes.length === 0) {
 let clientId = 'local';
 let sessionId = null;
 let isHost = false;
+let activePlayerIds = new Set();
+
+function reconcileSnakes() {
+  // Keep only snakes whose id is in activePlayerIds
+  const allowed = new Set(activePlayerIds);
+  game.snakes = game.snakes.filter(s => s.id && allowed.has(s.id));
+  // Rebuild snakesById and enforce colors: host lime, others blue
+  const map = {};
+  for (const s of game.snakes) {
+    if (s.id === 'host') {
+      s.color = 'lime';
+    } else if (s.id !== 'host') {
+      s.color = 'blue';
+    }
+    map[s.id] = s;
+  }
+  game.snakesById = map;
+}
 
 function withTimeout(promise, ms, onTimeoutMsg = 'Timeout') {
   return new Promise((resolve, reject) => {
@@ -90,6 +108,9 @@ async function hostSession() {
     if (!game.snakesById) game.snakesById = {};
     game.snakesById[clientId] = game.snakes[0];
     game.snakes[0].id = clientId;
+    game.snakes[0].color = 'lime';
+    activePlayerIds.add('host');
+    reconcileSnakes();
     listen(handleNetworkEvent);
     statusDiv.innerText = `Status: Hosting ${sessionId}`;
     if (sessionInput) sessionInput.value = sessionId;
@@ -134,15 +155,19 @@ async function joinSession(id) {
     }
     if (lastErr) throw lastErr;
     game.snakes[0].id = clientId;
-    game.snakes[0].color = 'cyan';
+    game.snakes[0].color = 'blue';
     if (!game.snakesById) game.snakesById = {};
     game.snakesById[clientId] = game.snakes[0];
+    activePlayerIds.add(clientId);
+    reconcileSnakes();
     listen(handleNetworkEvent);
     statusDiv.innerText = `Status: Joined ${sessionId}`;
     console.log('[MP] Join OK. clientId=', clientId);
 
     // Request presence from host to ensure we sync player list
     try { sendGame({ type: 'presence_request', clientId }); } catch {}
+    // Announce to host with our id/color so it can map our snake
+    try { sendGame({ type: 'hello', clientId, color: 'blue' }); } catch {}
   } catch (e) {
     console.error('Failed to join session', e);
     statusDiv.innerText = `Status: Join failed: ${e?.message || e}`;
@@ -167,7 +192,8 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       return;
     }
     if (senderId && !game.snakesById[senderId]) {
-      game.addPlayer(senderId, data?.color || 'lime');
+      // Joined player should be blue
+      game.addPlayer(senderId, 'blue');
       render();
     }
     // Deduplicate snakes by id (keep one per id)
@@ -179,6 +205,10 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       seen.add(id);
       return true;
     });
+    // Ensure snakesById reflects current snakes uniquely
+    activePlayerIds.add('host');
+    activePlayerIds.add(senderId);
+    reconcileSnakes();
     // If host, broadcast presence to sync all clients
     if (isHost) {
       try {
@@ -188,6 +218,21 @@ function handleNetworkEvent(event, messageId, senderId, data) {
     }
   }
   if (event === 'game') {
+    if (data?.type === 'hello' && isHost) {
+      // Host: ensure a snake exists for the announcing client
+      if (!game.snakesById) game.snakesById = {};
+      const pid = data?.clientId;
+      if (pid && !game.snakesById[pid]) {
+        game.addPlayer(pid, data?.color || 'lime');
+        render();
+      }
+      if (pid) {
+        activePlayerIds.add('host');
+        activePlayerIds.add(pid);
+        reconcileSnakes();
+      }
+      return;
+    }
     if (data?.type === 'start') {
       // Client starts when host broadcasts start
       if (!isHost && game.state === 'Waiting') {
@@ -228,11 +273,8 @@ function handleNetworkEvent(event, messageId, senderId, data) {
         s.color = sn.color || s.color;
         s.alive = sn.alive !== false;
       }
-      // Remove snakes not in snapshot
-      game.snakes = game.snakes.filter(s => ids.has(s.id));
-      for (const id in game.snakesById) {
-        if (!ids.has(id)) delete game.snakesById[id];
-      }
+      activePlayerIds = ids;
+      reconcileSnakes();
       // Sync food and score
       if (snapshot.food) game.food = { x: snapshot.food.x, y: snapshot.food.y };
       if (typeof snapshot.score === 'number') game.score = snapshot.score;
@@ -251,15 +293,12 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       if (!game.snakesById) game.snakesById = {};
       for (const pid of data.players) {
         if (!game.snakesById[pid]) {
-          game.addPlayer(pid, pid === clientId ? game.snakes[0]?.color || 'lime' : 'lime');
+          const color = pid === clientId ? (game.snakes[0]?.color || 'lime') : 'blue';
+          game.addPlayer(pid, color);
         }
       }
-      // Remove any snakes whose id is not in players (or missing id)
-      const allowed = new Set(data.players);
-      game.snakes = game.snakes.filter(s => s.id && allowed.has(s.id));
-      for (const id in game.snakesById) {
-        if (!allowed.has(id)) delete game.snakesById[id];
-      }
+      activePlayerIds = new Set(data.players);
+      reconcileSnakes();
       render();
       return;
     }
