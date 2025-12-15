@@ -1,6 +1,6 @@
-import { MultiplayerApi } from './MultiplayerApi.js';
 
-const api = new MultiplayerApi(`ws${location.protocol === 'https:' ? 's' : ''}://${location.host}/multiplayer`);
+import { MultiplayerApi } from './MultiplayerApi.js';
+const api = new MultiplayerApi(`ws${location.protocol === 'https:' ? 's' : ''}://${location.host}/ws`);
 
 const hostButton = document.getElementById('hostButton');
 const joinButton = document.getElementById('joinButton');

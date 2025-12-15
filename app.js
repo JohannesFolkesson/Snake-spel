@@ -1,5 +1,8 @@
 import { Game } from "./game.js"
-import { initHost, initJoin, listen, sendGame } from "./MultiplayerApi/multiplayer.js";
+import { MultiplayerApi } from "./MultiplayerApi.js";
+
+const DEFAULT_WS_URL = "wss://mpapi.se/net";
+let api = null;
 
 const canvas =  document.getElementById("gameCanvas")
 const ctx = canvas.getContext("2d")
@@ -20,7 +23,8 @@ const resetBtn = document.getElementById('resetBtn')
 const hostBtn = document.getElementById('hostBtn')
 const joinBtn = document.getElementById('joinBtn')
 const sessionInput = document.getElementById('sessionInput')
-const serverUrlInput = document.getElementById('serverUrlInput')
+const serverUrlInput = document.getElementById('serverUrlInput');
+if (serverUrlInput) serverUrlInput.value = DEFAULT_WS_URL;
 
 // Prefill server URL from query string: ?server=ws://host:port/path
 try {
@@ -40,9 +44,9 @@ const game = new Game({
   tickRate: 80,
   onRender: render
 })
-// Ensure there is a local snake so the game renders
+// Ensure there is en host-snake så spelet renderar
 if (!game.snakes || game.snakes.length === 0) {
-  game.addPlayer('local', 'lime');
+  game.addPlayer('host', 'lime');
 }
 
 // Multiplayer state
@@ -94,51 +98,43 @@ async function hostSession() {
   isHost = true;
   try {
     console.log('[MP] HostSession clicked');
-    const entered = (serverUrlInput?.value?.trim());
-    const candidates = [
-      entered,
-      'wss://pedrochat.se/net',
-      'wss://pedrochat.se'
-    ].filter(Boolean);
+    const url = serverUrlInput?.value?.trim() || DEFAULT_WS_URL;
+    api = new MultiplayerApi(url);
     let res = null;
     let lastErr = null;
-    for (const url of candidates) {
-      statusDiv.innerText = `Status: Connecting ${url}...`;
-      try {
-        res = await withTimeout(initHost(url), 7000, `Socket connect timeout for ${url}`);
-        // If success, set the field to the working URL
-        if (serverUrlInput) serverUrlInput.value = url;
-        break;
-      } catch (e) {
-        lastErr = e;
-        console.warn('[MP] Host attempt failed for', url, e?.message || e);
-      }
+    statusDiv.innerText = `Status: Connecting ${url}...`;
+    try {
+      res = await withTimeout(api.host(), 7000, `Socket connect timeout for ${url}`);
+      if (serverUrlInput) serverUrlInput.value = url;
+    } catch (e) {
+      lastErr = e;
+      console.warn('[MP] Host attempt failed for', url, e?.message || e);
     }
     if (!res) throw lastErr || new Error('No working WebSocket endpoint');
-    sessionId = res.sessionId;
+    sessionId = res.session;
     clientId = 'host';
-    // Map by id without dropping existing mappings
     if (!game.snakesById) game.snakesById = {};
-    game.snakesById[clientId] = game.snakes[0];
-    game.snakes[0].id = clientId;
-    game.snakes[0].color = 'lime';
-    activePlayerIds.add('host');
+    // Sätt host-snake
+    if (!game.snakesById['host']) {
+      game.addPlayer('host', 'lime');
+    }
+    game.snakesById['host'].id = 'host';
+    game.snakesById['host'].color = 'lime';
+    activePlayerIds = new Set(['host']);
     reconcileSnakes();
-    listen(handleNetworkEvent);
+    api.listen(handleNetworkEvent);
     statusDiv.innerText = `Status: Hosting ${sessionId}`;
     if (sessionInput) sessionInput.value = sessionId;
     console.log('[MP] Hosting OK. sessionId=', sessionId);
-
-    // Broadcast initial presence so any joiners can sync players
     try {
       const players = Object.keys(game.snakesById || {});
-      sendGame({ type: 'presence', players });
+      api.game({ type: 'presence', players });
     } catch {}
   } catch (e) {
     isHost = false;
     console.error('Failed to host session', e);
     statusDiv.innerText = `Status: Host failed: ${e?.message || e}`;
-    alert(`Could not host session. Check server URL/path and try again.`);
+    alert(`Could not host session. Check server URL/path och försök igen.`);
   }
 }
 
@@ -148,43 +144,38 @@ async function joinSession(id) {
   sessionId = id;
   clientId = `client_${Math.floor(Math.random()*100000)}`;
   try {
-    const entered = (serverUrlInput?.value?.trim());
-    const candidates = [
-      entered,
-      'wss://pedrochat.se/net',
-      'wss://pedrochat.se'
-    ].filter(Boolean);
+    const url = serverUrlInput?.value?.trim() || DEFAULT_WS_URL;
+    api = new MultiplayerApi(url);
     let lastErr = null;
-    for (const url of candidates) {
-      statusDiv.innerText = `Status: Joining ${id} @ ${url}...`;
-      try {
-        await withTimeout(initJoin(sessionId, { name: clientId, color: 'cyan' }, url), 7000, `Socket connect timeout for ${url}`);
-        if (serverUrlInput) serverUrlInput.value = url;
-        break;
-      } catch (e) {
-        lastErr = e;
-        console.warn('[MP] Join attempt failed for', url, e?.message || e);
-      }
+    statusDiv.innerText = `Status: Joining ${id} @ ${url}...`;
+    try {
+      const joinRes = await withTimeout(api.join(sessionId, { name: clientId, color: 'blue' }), 7000, `Socket connect timeout for ${url}`);
+      if (serverUrlInput) serverUrlInput.value = url;
+    } catch (e) {
+      lastErr = e;
+      console.warn('[MP] Join attempt failed for', url, e?.message || e);
     }
     if (lastErr) throw lastErr;
-    game.snakes[0].id = clientId;
-    game.snakes[0].color = 'blue';
     if (!game.snakesById) game.snakesById = {};
-    game.snakesById[clientId] = game.snakes[0];
-    activePlayerIds.add(clientId);
+    // Lägg till client-snake
+    if (!game.snakesById[clientId]) {
+      game.addPlayer(clientId, 'blue');
+    }
+    game.snakesById[clientId].id = clientId;
+    game.snakesById[clientId].color = 'blue';
+    activePlayerIds = new Set(['host', clientId]);
     reconcileSnakes();
-    listen(handleNetworkEvent);
+    api.listen(handleNetworkEvent);
     statusDiv.innerText = `Status: Joined ${sessionId}`;
     console.log('[MP] Join OK. clientId=', clientId);
-
     // Request presence from host to ensure we sync player list
-    try { sendGame({ type: 'presence_request', clientId }); } catch {}
-    // Announce to host with our id/color so it can map our snake
-    try { sendGame({ type: 'hello', clientId, color: 'blue' }); } catch {}
+    try { api.game({ type: 'presence_request', clientId }); } catch {}
+    // Announce to host with our id/color so det kan mappa vår snake
+    try { api.game({ type: 'hello', clientId, color: 'blue' }); } catch {}
   } catch (e) {
     console.error('Failed to join session', e);
     statusDiv.innerText = `Status: Join failed: ${e?.message || e}`;
-    alert(`Could not join session ${id}. Check server URL/path and try again.`);
+    alert(`Could not join session ${id}. Check server URL/path och försök igen.`);
   }
 }
 
@@ -227,7 +218,7 @@ function handleNetworkEvent(event, messageId, senderId, data) {
     if (isHost) {
       try {
         const players = Object.keys(game.snakesById || {});
-        sendGame({ type: 'presence', players });
+        api.sendGame({ type: 'presence', players });
       } catch {}
     }
   }
@@ -316,7 +307,7 @@ function handleNetworkEvent(event, messageId, senderId, data) {
     if (data?.type === 'presence_request' && isHost) {
       try {
         const players = Object.keys(game.snakesById || {});
-        sendGame({ type: 'presence', players });
+        api.sendGame({ type: 'presence', players });
       } catch {}
       return;
     }
@@ -357,7 +348,7 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       try {
         if (game.state === 'Waiting') {
           game.start();
-          sendGame({ type: 'start' });
+          api.sendGame({ type: 'start' });
         }
       } catch {}
       return;
@@ -417,7 +408,7 @@ function render() {
           alive: s.alive,
           segments: s.segments.map(seg => ({ x: seg.x, y: seg.y }))
         }));
-        sendGame({ type: 'state', snakes: snakesPayload, food: state.food, score: state.score });
+        api.sendGame({ type: 'state', snakes: snakesPayload, food: state.food, score: state.score });
       } catch {}
     }
 }
@@ -714,10 +705,10 @@ window.addEventListener("keydown", e => {
     e.key === 'ArrowRight' ? 'RIGHT' : null
   );
   if (dir) {
-    try { sendGame({ type: 'direction', clientId, dir }); } catch {}
+    try { api.game({ type: 'direction', clientId, dir }); } catch {}
     // If client pressed an arrow while idle, request start from host
     if (!isHost && game.state === 'Waiting') {
-      try { sendGame({ type: 'start_request', clientId }); } catch {}
+      try { api.game({ type: 'start_request', clientId }); } catch {}
       // Fallback: start locally to ensure control responsiveness
       try { game.start(); } catch {}
     }
@@ -755,7 +746,7 @@ resetBtn.addEventListener("click", () => {
     hideGameOver();
     render();
     // Do NOT auto-start; broadcast restart and wait for input or Start Game
-    try { sendGame({ type: 'restart' }); } catch {}
+    try { api.game({ type: 'restart' }); } catch {}
   } else {
     game.reset();
     hideGameOver();
@@ -811,7 +802,7 @@ function startGameSynced() {
     // Hide game-over popup if visible
     hideGameOver();
     game.start();
-    try { sendGame({ type: 'start' }); } catch {}
+    try { api.game({ type: 'start' }); } catch {}
   } else {
     // Clients rely on host 'start' broadcast; do not start here
   }
@@ -830,7 +821,7 @@ if (startBtn) {
       // Client: start locally for responsiveness and request host to start
       hideGameOver();
       try { game.start(); } catch {}
-      try { sendGame({ type: 'start_request', clientId }); } catch {}
+      try { api.game({ type: 'start_request', clientId }); } catch {}
       statusDiv.innerText = `Status: Playing${sessionId ? ` • Joined ${sessionId}` : ''}`;
     }
   });
