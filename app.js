@@ -50,7 +50,7 @@ if (!game.snakesById['local']) {
   game.addPlayer('local', 'lime');
 }
 
-// Multiplayer state
+
 let clientId = 'local';
 let sessionId = null;
 let isHost = false;
