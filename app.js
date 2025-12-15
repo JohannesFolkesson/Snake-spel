@@ -44,9 +44,10 @@ const game = new Game({
   tickRate: 80,
   onRender: render
 })
-// Ensure there is en host-snake så spelet renderar
-if (!game.snakes || game.snakes.length === 0) {
-  game.addPlayer('host', 'lime');
+
+// Singleplayer: se till att det alltid finns en snake för clientId 'local'
+if (!game.snakesById['local']) {
+  game.addPlayer('local', 'lime');
 }
 
 // Multiplayer state
@@ -684,39 +685,52 @@ function drawTongue(headX, headY, radius, direction) {
 }
 
 
+
 window.addEventListener("keydown", e => {
-  const snake = game.snakesById?.[clientId];
-
-  const wasIdle = game.state === "Waiting";
-
-  // Apply local direction immediately for responsiveness (host and client)
-  if (snake) {
-    if (e.key === "ArrowUp") snake.setDirection("UP");
-    if (e.key === "ArrowDown") snake.setDirection("DOWN");
-    if (e.key === "ArrowLeft") snake.setDirection("LEFT");
-    if (e.key === "ArrowRight") snake.setDirection("RIGHT");
-  }
-
-  // Broadcast input for multiplayer
-  const dir = (
-    e.key === 'ArrowUp' ? 'UP' :
-    e.key === 'ArrowDown' ? 'DOWN' :
-    e.key === 'ArrowLeft' ? 'LEFT' :
-    e.key === 'ArrowRight' ? 'RIGHT' : null
-  );
-  if (dir) {
-    try { api.game({ type: 'direction', clientId, dir }); } catch {}
-    // If client pressed an arrow while idle, request start from host
-    if (!isHost && game.state === 'Waiting') {
-      try { api.game({ type: 'start_request', clientId }); } catch {}
-      // Fallback: start locally to ensure control responsiveness
-      try { game.start(); } catch {}
+  // Debug: logga relevant info vid piltryck
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
+    if (!game.snakesById?.[clientId]) {
+      console.log("[DEBUG] snake undefined! clientId:", clientId, "game.snakes:", game.snakes, "game.snakesById:", game.snakesById);
     }
+    console.log("Piltangent:", e.key, "clientId:", clientId, "game.state:", game.state, "snake:", game.snakesById?.[clientId]);
   }
+  // Gör så att piltangenter alltid styr ormen, även om input har fokus
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
+    // Förhindra scroll och att input-fält fångar piltangenter
+    e.preventDefault();
+    // Om du är i multiplayer: se till att clientId är rätt
+    const snake = game.snakesById?.[clientId];
+    const wasIdle = game.state === "Waiting";
 
-  // Only the host starts the game loop
-  if (isHost && wasIdle && snake && ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
-    game.start();
+    // Apply local direction immediately for responsiveness (host och client)
+    if (snake) {
+      if (e.key === "ArrowUp") snake.setDirection("UP");
+      if (e.key === "ArrowDown") snake.setDirection("DOWN");
+      if (e.key === "ArrowLeft") snake.setDirection("LEFT");
+      if (e.key === "ArrowRight") snake.setDirection("RIGHT");
+    }
+
+    // Broadcast input for multiplayer
+    const dir = (
+      e.key === 'ArrowUp' ? 'UP' :
+      e.key === 'ArrowDown' ? 'DOWN' :
+      e.key === 'ArrowLeft' ? 'LEFT' :
+      e.key === 'ArrowRight' ? 'RIGHT' : null
+    );
+    if (dir) {
+      try { api.game({ type: 'direction', clientId, dir }); } catch {}
+      // Om klient trycker pil när spelet väntar, be host starta
+      if (!isHost && game.state === 'Waiting') {
+        try { api.game({ type: 'start_request', clientId }); } catch {}
+        // Fallback: starta lokalt för responsivitet
+        try { game.start(); } catch {}
+      }
+    }
+
+    // Host startar spelet på piltryck om idle
+    if (isHost && wasIdle && snake) {
+      game.start();
+    }
   }
 });
 
