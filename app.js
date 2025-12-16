@@ -1,5 +1,6 @@
 import { Game } from "./game.js"
 import { MultiplayerApi } from "./MultiplayerApi.js";
+import { Snake } from "./snake.js";
 
 const DEFAULT_WS_URL = "wss://mpapi.se/net";
 let api = null;
@@ -38,6 +39,8 @@ try {
 const GRID_WIDTH = Math.floor(canvas.width / CELL_SIZE);
 const GRID_HEIGHT = Math.floor(canvas.height / CELL_SIZE);
 
+let sessionId = null;
+
 const game = new Game({
   width: GRID_WIDTH,
   height: GRID_HEIGHT,
@@ -45,35 +48,33 @@ const game = new Game({
   onRender: render
 })
 
-// Singleplayer: se till att det alltid finns en snake för clientId 'local'
-if (!game.snakesById['local']) {
-  game.addPlayer('local', 'lime');
+// Skapa alltid en orm för host (host-läge) eller local (singleplayer)
+if (!sessionId) {
+  if (!game.snakesById['local']) {
+    game.addPlayer('local', 'lime');
+  }
 }
 
-
 let clientId = 'local';
-let sessionId = null;
 let isHost = false;
 let activePlayerIds = new Set();
 
 function reconcileSnakes() {
-  // Always keep at most two snakes: host + one other
-  let roster = [];
+  // Alltid visa både host och klient (eller local) på båda sidor
+  let ids = [];
   if (isHost) {
-    // Host: prefer the host snake and the first non-host present
-    const hostSnake = game.snakesById['host'] || game.snakes.find(s => s.id === 'host') || game.snakes[0];
-    const other = game.snakes.find(s => s.id && s.id !== 'host');
-    if (hostSnake) roster.push(hostSnake);
-    if (other) roster.push(other);
+    // Host: alltid host + första klient (om finns)
+    const allIds = Object.keys(game.snakesById);
+    const clientIds = allIds.filter(id => id !== 'host');
+    ids = ['host'];
+    if (clientIds.length > 0) ids.push(clientIds[0]);
   } else {
-    // Client: keep host and our own clientId
-    const hostSnake = game.snakesById['host'] || game.snakes.find(s => s.id === 'host');
-    const meSnake = game.snakesById[clientId] || game.snakes.find(s => s.id === clientId) || game.snakes[0];
-    if (hostSnake) roster.push(hostSnake);
-    if (meSnake && (!hostSnake || meSnake.id !== hostSnake.id)) roster.push(meSnake);
+    // Klient: alltid host + min egen orm
+    ids = ['host', clientId];
   }
-  game.snakes = roster.slice(0, 2);
-  // Rebuild snakesById and enforce colors consistently
+  // Bygg snakes-listan i rätt ordning
+  game.snakes = ids.map(id => game.snakesById[id]).filter(Boolean);
+  // Rebuild snakesById och färger
   const map = {};
   for (const s of game.snakes) {
     if (s.id === 'host') {
@@ -124,6 +125,7 @@ async function hostSession() {
     activePlayerIds = new Set(['host']);
     reconcileSnakes();
     api.listen(handleNetworkEvent);
+    console.log('[LISTEN] api.listen(handleNetworkEvent) kopplad (host)');
     statusDiv.innerText = `Status: Hosting ${sessionId}`;
     if (sessionInput) sessionInput.value = sessionId;
     console.log('[MP] Hosting OK. sessionId=', sessionId);
@@ -167,6 +169,7 @@ async function joinSession(id) {
     activePlayerIds = new Set(['host', clientId]);
     reconcileSnakes();
     api.listen(handleNetworkEvent);
+    console.log('[LISTEN] api.listen(handleNetworkEvent) kopplad (klient)');
     statusDiv.innerText = `Status: Joined ${sessionId}`;
     console.log('[MP] Join OK. clientId=', clientId);
     // Request presence from host to ensure we sync player list
@@ -181,6 +184,8 @@ async function joinSession(id) {
 }
 
 function handleNetworkEvent(event, messageId, senderId, data) {
+  // Debug: logga ALLA inkommande event på klienten
+  console.log('[EVENT]', event, { messageId, senderId, data });
   if (event === 'socket_error') {
     statusDiv.innerText = `Status: Socket error. Check server ${data?.serverUrl || ''}`;
     console.error('[MP] Socket error', data);
@@ -224,6 +229,39 @@ function handleNetworkEvent(event, messageId, senderId, data) {
     }
   }
   if (event === 'game') {
+    // Debug: logga data.type för alla game-events
+    console.log('[EVENT:game] data.type:', data?.type, data);
+    if (data?.type === 'state' && !isHost) {
+      // --- Multiplayer sync: ta emot state från host ---
+      const snapshot = data;
+      if (!game.snakesById) game.snakesById = {};
+      console.log('[SYNC] Mottar state från host:', JSON.stringify(snapshot.snakes, null, 2));
+      const ids = new Set();
+      for (const sn of (snapshot.snakes || [])) {
+        ids.add(sn.id);
+        let s = game.snakesById[sn.id];
+        if (!s) {
+          // Skapa alltid en Snake om den saknas (default-position 0,0)
+          s = new Snake({ id: sn.id, startPosition: { x: 0, y: 0 }, color: sn.color || 'lime' });
+          game.snakesById[sn.id] = s;
+          game.snakes.push(s);
+        }
+        // Alltid överskriv position och riktning från host
+        s.segments = sn.segments.map(seg => ({ x: seg.x, y: seg.y }));
+        s.direction = sn.direction;
+        s.nextDirection = sn.nextDirection;
+        s.color = sn.color || s.color;
+        s.alive = sn.alive !== false;
+      }
+      console.log('[SYNC] Efter sync snakesById:', JSON.stringify(game.snakesById, null, 2));
+      activePlayerIds = ids;
+      reconcileSnakes();
+      console.log('[SYNC] Efter reconcile snakes:', JSON.stringify(game.snakes, null, 2));
+      if (snapshot.food) game.food = { x: snapshot.food.x, y: snapshot.food.y };
+      if (typeof snapshot.score === 'number') game.score = snapshot.score;
+      render();
+      return;
+    }
     if (data?.type === 'hello' && isHost) {
       // Host: ensure a snake exists for the announcing client
       if (!game.snakesById) game.snakesById = {};
@@ -280,6 +318,8 @@ function handleNetworkEvent(event, messageId, senderId, data) {
     if (data?.type === 'state' && !isHost) {
       const snapshot = data;
       if (!game.snakesById) game.snakesById = {};
+      // Debug: logga vilka ormar som kommer från host
+      console.log('[SYNC] Mottar state från host:', JSON.stringify(snapshot.snakes, null, 2));
       // Sync snakes
       const ids = new Set();
       for (const sn of (snapshot.snakes || [])) {
@@ -296,8 +336,12 @@ function handleNetworkEvent(event, messageId, senderId, data) {
         s.color = sn.color || s.color;
         s.alive = sn.alive !== false;
       }
+      // Debug: logga snakesById efter sync
+      console.log('[SYNC] Efter sync snakesById:', JSON.stringify(game.snakesById, null, 2));
       activePlayerIds = ids;
       reconcileSnakes();
+      // Debug: logga snakes-listan efter reconcile
+      console.log('[SYNC] Efter reconcile snakes:', JSON.stringify(game.snakes, null, 2));
       // Sync food and score
       if (snapshot.food) game.food = { x: snapshot.food.x, y: snapshot.food.y };
       if (typeof snapshot.score === 'number') game.score = snapshot.score;
@@ -409,7 +453,9 @@ function render() {
           alive: s.alive,
           segments: s.segments.map(seg => ({ x: seg.x, y: seg.y }))
         }));
-        api.sendGame({ type: 'state', snakes: snakesPayload, food: state.food, score: state.score });
+        // Debug: logga vad som skickas ut (som JSON)
+        console.log('[HOST SYNC] Skickar state till klienter:', JSON.stringify({ snakes: snakesPayload, food: state.food, score: state.score }, null, 2));
+        api.game({ type: 'state', snakes: snakesPayload, food: state.food, score: state.score });
       } catch {}
     }
 }
@@ -534,10 +580,10 @@ function drawConnectedSnake(snake) {
   // Draw body segments with gradients and pattern
   segments.forEach((seg, index) => {
     if (index === 0) return; // Skip head
-    
     const centerX = seg.x * CELL_SIZE + CELL_SIZE / 2;
     const centerY = seg.y * CELL_SIZE + CELL_SIZE / 2;
-    
+    // Skydda mot NaN/icke-finit koordinat
+    if (!isFinite(centerX) || !isFinite(centerY)) return;
     // Gradient for each segment
     const segGradient = ctx.createRadialGradient(
       centerX - radius * 0.3,
@@ -549,12 +595,10 @@ function drawConnectedSnake(snake) {
     );
     segGradient.addColorStop(0, "#86efac");
     segGradient.addColorStop(1, "#22c55e");
-    
     ctx.fillStyle = segGradient;
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
     ctx.fill();
-    
     if (index % 2 === 0) {
       ctx.strokeStyle = "rgba(21, 128, 61, 0.3)";
       ctx.lineWidth = 1.5;
