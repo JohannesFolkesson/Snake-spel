@@ -63,11 +63,16 @@ function reconcileSnakes() {
   // Alltid visa både host och klient (eller local) på båda sidor
   let ids = [];
   if (isHost) {
-    // Host: alltid host + första klient (om finns)
+    // Host: alltid host + EN klient (max 2 ormar)
     const allIds = Object.keys(game.snakesById);
     const clientIds = allIds.filter(id => id !== 'host');
     ids = ['host'];
     if (clientIds.length > 0) ids.push(clientIds[0]);
+    // Rensa bort övriga ormar ur snakesById och snakes
+    for (const id of Object.keys(game.snakesById)) {
+      if (!ids.includes(id)) delete game.snakesById[id];
+    }
+    game.snakes = ids.map(id => game.snakesById[id]).filter(Boolean);
   } else {
     // Klient: alltid host + min egen orm
     ids = ['host', clientId];
@@ -270,15 +275,15 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       return;
     }
     if (data?.type === 'hello' && isHost) {
-      // Host: ensure a snake exists for the announcing client
+      // Host: ensure a snake exists for the announcing client (alltid lägg till om saknas)
       if (!game.snakesById) game.snakesById = {};
       const pid = data?.clientId;
-      if (pid && !game.snakesById[pid] && game.snakes.length < 2) {
+      if (pid && !game.snakesById[pid]) {
         game.addPlayer(pid, data?.color || 'lime');
         render();
       }
       if (pid) {
-        // Host tracks only itself and one client
+        // Host tracks only itself och senaste klient
         activePlayerIds = new Set(['host', pid]);
         reconcileSnakes();
       }
@@ -387,11 +392,17 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       return;
     }
     if (data?.type === 'direction') {
-      const s = game.snakesById?.[data.clientId];
-      if (s) s.setDirection(data.dir);
-      // If this tab is idle, start the game so ticks run
-      if (game.state === 'Waiting') {
-        try { game.start(); } catch {}
+      if (isHost) {
+        let s = game.snakesById?.[data.clientId];
+        if (!s) {
+          // Skapa orm för klienten om den saknas
+          s = game.addPlayer(data.clientId, 'blue');
+        }
+        if (s) s.setDirection(data.dir);
+        // If this tab is idle, start the game so ticks run
+        if (game.state === 'Waiting') {
+          try { game.start(); } catch {}
+        }
       }
       return;
     }
@@ -753,8 +764,8 @@ window.addEventListener("keydown", e => {
     const snake = game.snakesById?.[clientId];
     const wasIdle = game.state === "Waiting";
 
-    // Apply local direction immediately for responsiveness (host och client)
-    if (snake) {
+    // Apply local direction for host eller singleplayer (ingen api eller multiplayer ej aktiv)
+    if ((isHost || !api) && snake) {
       if (e.key === "ArrowUp") snake.setDirection("UP");
       if (e.key === "ArrowDown") snake.setDirection("DOWN");
       if (e.key === "ArrowLeft") snake.setDirection("LEFT");
