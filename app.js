@@ -237,14 +237,13 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       if (!game.snakesById) game.snakesById = {};
       console.log('[SYNC] Mottar state från host:', JSON.stringify(snapshot.snakes, null, 2));
       const ids = new Set();
+      // Skapa eller uppdatera ormar från hostens state
       for (const sn of (snapshot.snakes || [])) {
         ids.add(sn.id);
         let s = game.snakesById[sn.id];
         if (!s) {
-          // Skapa alltid en Snake om den saknas (default-position 0,0)
           s = new Snake({ id: sn.id, startPosition: { x: 0, y: 0 }, color: sn.color || 'lime' });
           game.snakesById[sn.id] = s;
-          game.snakes.push(s);
         }
         // Alltid överskriv position och riktning från host
         s.segments = sn.segments.map(seg => ({ x: seg.x, y: seg.y }));
@@ -253,10 +252,18 @@ function handleNetworkEvent(event, messageId, senderId, data) {
         s.color = sn.color || s.color;
         s.alive = sn.alive !== false;
       }
+      // Ta bort ormar som inte finns i hostens state från snakesById
+      for (const id of Object.keys(game.snakesById)) {
+        if (!ids.has(id)) {
+          delete game.snakesById[id];
+        }
+      }
+      // Bygg om snakes-listan så den matchar hostens state exakt (ordning och antal)
+      game.snakes = (snapshot.snakes || []).map(sn => game.snakesById[sn.id]).filter(Boolean);
       console.log('[SYNC] Efter sync snakesById:', JSON.stringify(game.snakesById, null, 2));
       activePlayerIds = ids;
-      reconcileSnakes();
-      console.log('[SYNC] Efter reconcile snakes:', JSON.stringify(game.snakes, null, 2));
+      // reconcileSnakes() behövs ej, vi har redan rätt lista
+      console.log('[SYNC] Efter rebuild snakes:', JSON.stringify(game.snakes, null, 2));
       if (snapshot.food) game.food = { x: snapshot.food.x, y: snapshot.food.y };
       if (typeof snapshot.score === 'number') game.score = snapshot.score;
       render();
