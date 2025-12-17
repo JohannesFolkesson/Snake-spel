@@ -36,8 +36,8 @@ try {
   }
 } catch {}
 
-const GRID_WIDTH = Math.floor(canvas.width / CELL_SIZE);
-const GRID_HEIGHT = Math.floor(canvas.height / CELL_SIZE);
+const GRID_WIDTH = 40;
+const GRID_HEIGHT = 40;
 
 let sessionId = null;
 
@@ -121,6 +121,8 @@ async function hostSession() {
     sessionId = res.session;
     clientId = 'host';
     if (!game.snakesById) game.snakesById = {};
+    // Ta bort local-snake om den finns
+    game.removePlayer('local');
     // Sätt host-snake
     if (!game.snakesById['host']) {
       game.addPlayer('host', 'lime');
@@ -129,6 +131,7 @@ async function hostSession() {
     game.snakesById['host'].color = 'lime';
     activePlayerIds = new Set(['host']);
     reconcileSnakes();
+    render();
     api.listen(handleNetworkEvent);
     console.log('[LISTEN] api.listen(handleNetworkEvent) kopplad (host)');
     statusDiv.innerText = `Status: Hosting ${sessionId}`;
@@ -150,7 +153,7 @@ async function joinSession(id) {
   if (!id) return;
   isHost = false;
   sessionId = id;
-  clientId = `client_${Math.floor(Math.random()*100000)}`;
+  clientId = `client_${Date.now()}_${Math.floor(Math.random()*100000)}`;
   try {
     const url = serverUrlInput?.value?.trim() || DEFAULT_WS_URL;
     api = new MultiplayerApi(url);
@@ -165,14 +168,22 @@ async function joinSession(id) {
     }
     if (lastErr) throw lastErr;
     if (!game.snakesById) game.snakesById = {};
+    // Ta bort local-snake om den finns
+    game.removePlayer('local');
     // Lägg till client-snake
     if (!game.snakesById[clientId]) {
       game.addPlayer(clientId, 'blue');
     }
     game.snakesById[clientId].id = clientId;
     game.snakesById[clientId].color = 'blue';
+    // Lägg till host-snake så den syns direkt
+    if (!game.snakesById['host']) {
+      game.addPlayer('host', 'lime');
+    }
+    
     activePlayerIds = new Set(['host', clientId]);
     reconcileSnakes();
+    render();
     api.listen(handleNetworkEvent);
     console.log('[LISTEN] api.listen(handleNetworkEvent) kopplad (klient)');
     statusDiv.innerText = `Status: Joined ${sessionId}`;
@@ -204,12 +215,8 @@ function handleNetworkEvent(event, messageId, senderId, data) {
   if (event === 'joined') {
     // Ignore join events for ourselves to avoid duplicates
       if (senderId === clientId) return;
-      if (senderId && !game.snakesById[senderId]) {
-        const snake = new Snake({ id: senderId, color: 'blue' });
-        game.snakes.push(snake);
-        game.snakesById[senderId] = snake;
-        render();
-      }
+      // No need to create snake here, it's added in 'hello' or state sync
+      render();
     // Deduplicate snakes by id (keep one per id)
     const seen = new Set();
     game.snakes = game.snakes.filter(s => {
@@ -392,10 +399,11 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       return;
     }
     if (data?.type === 'direction') {
-      if (isHost) {
+      if (isHost && data?.clientId) {
+        // Only update the direction for the correct snake
         let s = game.snakesById?.[data.clientId];
         if (!s) {
-          // Skapa orm för klienten om den saknas
+          // Create snake for client if missing
           s = game.addPlayer(data.clientId, 'blue');
         }
         if (s) s.setDirection(data.dir);
@@ -572,12 +580,9 @@ function drawConnectedSnake(snake) {
   const segments = snake.segments;
   const radius = CELL_SIZE / 2;
 
-  // Draw body line with gradient
-  const bodyGradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-  bodyGradient.addColorStop(0, "#4ade80");
-  bodyGradient.addColorStop(1, "#16a34a");
-  
-  ctx.strokeStyle = bodyGradient;
+  // Use snake.color for body and head
+  const bodyColor = snake.color || "lime";
+  ctx.strokeStyle = bodyColor;
   ctx.lineWidth = CELL_SIZE;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -586,7 +591,6 @@ function drawConnectedSnake(snake) {
   segments.forEach((seg, index) => {
     const x = seg.x * CELL_SIZE + CELL_SIZE / 2;
     const y = seg.y * CELL_SIZE + CELL_SIZE / 2;
-    
     if (index === 0) {
       ctx.moveTo(x, y);
     } else {
@@ -595,25 +599,13 @@ function drawConnectedSnake(snake) {
   });
   ctx.stroke();
 
-  // Draw body segments with gradients and pattern
+  // Draw body segments
   segments.forEach((seg, index) => {
     if (index === 0) return; // Skip head
     const centerX = seg.x * CELL_SIZE + CELL_SIZE / 2;
     const centerY = seg.y * CELL_SIZE + CELL_SIZE / 2;
-    // Skydda mot NaN/icke-finit koordinat
     if (!isFinite(centerX) || !isFinite(centerY)) return;
-    // Gradient for each segment
-    const segGradient = ctx.createRadialGradient(
-      centerX - radius * 0.3,
-      centerY - radius * 0.3,
-      0,
-      centerX,
-      centerY,
-      radius
-    );
-    segGradient.addColorStop(0, "#86efac");
-    segGradient.addColorStop(1, "#22c55e");
-    ctx.fillStyle = segGradient;
+    ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
     ctx.fill();
@@ -630,8 +622,7 @@ function drawConnectedSnake(snake) {
   const head = segments[0];
   const headX = head.x * CELL_SIZE + CELL_SIZE / 2;
   const headY = head.y * CELL_SIZE + CELL_SIZE / 2;
-  
-  ctx.fillStyle = "#16a34a";
+  ctx.fillStyle = bodyColor;
   ctx.beginPath();
   ctx.arc(headX, headY, radius * 1.1, 0, Math.PI * 2);
   ctx.fill();
@@ -764,12 +755,13 @@ window.addEventListener("keydown", e => {
     const snake = game.snakesById?.[clientId];
     const wasIdle = game.state === "Waiting";
 
-    // Apply local direction for host eller singleplayer (ingen api eller multiplayer ej aktiv)
-    if ((isHost || !api) && snake) {
+    // Apply local direction for responsiveness
+    if (snake) {
       if (e.key === "ArrowUp") snake.setDirection("UP");
       if (e.key === "ArrowDown") snake.setDirection("DOWN");
       if (e.key === "ArrowLeft") snake.setDirection("LEFT");
       if (e.key === "ArrowRight") snake.setDirection("RIGHT");
+      console.log("Set direction on snake id:", clientId, "color:", snake?.color, "to:", dir);
     }
 
     // Broadcast input for multiplayer

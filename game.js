@@ -40,7 +40,14 @@ export class Game {
     reset() {
         this.stop();
         for (const snake of this.snakes) {
-            const startPos = this.board.getRandomEmptyCell(this.snakes, this.food)
+            let startPos;
+            if (snake.color === 'lime') {
+                startPos = { x: 5, y: 10 };
+            } else if (snake.color === 'blue') {
+                startPos = { x: 15, y: 10 };
+            } else {
+                startPos = this.board.getRandomEmptyCell(this.snakes, this.food);
+            }
             snake.reset(startPos)
         }
 
@@ -52,13 +59,21 @@ export class Game {
     addPlayer(id, color = 'lime') {
         // Prevent duplicates
         if (this.snakesById[id]) {
+            console.log("Player already exists:", id);
             return this.snakesById[id];
         }
         // Cap to max 2 players (host + one joiner)
         if (this.snakes.length >= 2) {
-            return this.snakes[0];
+            console.log("Max players reached, returning first player:", id);
         }
-        const start = this.board.getRandomEmptyCell(this.snakes, this.food);
+        let start;
+        if (color === 'lime') {
+            start = { x: 5, y: 10 };
+        } else if (color === 'blue') {
+            start = { x: 15, y: 10 };
+        } else {
+            start = this.board.getRandomEmptyCell(this.snakes, this.food);
+        }
         const snake = new Snake({ id, startPosition: start, color });
         this.snakes.push(snake);
         this.snakesById[id] = snake;
