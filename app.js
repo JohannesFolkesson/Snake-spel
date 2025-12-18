@@ -17,7 +17,8 @@ const TONGUE_DURATION = 8;
 
 const statusDiv = document.getElementById("status")
 
-const scoreDiv = document.getElementById("score")
+const scoreHostDiv = document.getElementById("scoreHost")
+const scoreBlueDiv = document.getElementById("scoreBlue")
 const startBtn = document.getElementById("startBtn")
 
 const resetBtn = document.getElementById('resetBtn')
@@ -36,8 +37,13 @@ try {
   }
 } catch {}
 
-const GRID_WIDTH = 40;
-const GRID_HEIGHT = 40;
+// Increased grid to make logical and visual board larger
+const GRID_WIDTH = 60;
+const GRID_HEIGHT = 45;
+
+// Ensure canvas matches logical grid size so walls are visible
+canvas.width = GRID_WIDTH * CELL_SIZE;
+canvas.height = GRID_HEIGHT * CELL_SIZE;
 
 let sessionId = null;
 
@@ -84,8 +90,18 @@ function reconcileSnakes() {
   for (const s of game.snakes) {
     if (s.id === 'host') {
       s.color = 'lime';
+      // Säkerställ att host alltid startar på rätt plats
+      if (s.segments && s.segments.length > 0) {
+        s.segments[0] = { x: 5, y: 10 };
+        if (s.segments[1]) s.segments[1] = { x: 4, y: 10 };
+      }
     } else {
       s.color = 'blue';
+      // Säkerställ att client alltid startar på rätt plats
+      if (s.segments && s.segments.length > 0) {
+        s.segments[0] = { x: 15, y: 10 };
+        if (s.segments[1]) s.segments[1] = { x: 14, y: 10 };
+      }
     }
     map[s.id] = s;
   }
@@ -400,14 +416,21 @@ function handleNetworkEvent(event, messageId, senderId, data) {
     }
     if (data?.type === 'direction') {
       if (isHost && data?.clientId) {
-        // Only update the direction for the correct snake
+        // Extra loggning för felsökning av styrning
+        console.log('[HOST] Mottar direction:', data.dir, 'för clientId:', data.clientId);
         let s = game.snakesById?.[data.clientId];
         if (!s) {
-          // Create snake for client if missing
+          // Skapa orm för klient om den saknas
+          console.warn('[HOST] Saknade snake för clientId, skapar ny blå orm:', data.clientId);
           s = game.addPlayer(data.clientId, 'blue');
         }
-        if (s) s.setDirection(data.dir);
-        // If this tab is idle, start the game so ticks run
+        if (s) {
+          s.setDirection(data.dir);
+          console.log('[HOST] Sätter direction på orm:', s.id, 'till:', data.dir);
+        } else {
+          console.error('[HOST] Kunde inte hitta eller skapa orm för clientId:', data.clientId);
+        }
+        // Om spelet väntar, starta på input
         if (game.state === 'Waiting') {
           try { game.start(); } catch {}
         }
@@ -461,8 +484,19 @@ function render() {
     }
 
     // Show game state plus multiplayer session info so Hosting/Joined persists
-    statusDiv.innerText = `Status: ${state.state}${sessionId ? ` • ${isHost ? 'Hosting ' + sessionId : 'Joined ' + sessionId}` : ''}`; 
-    scoreDiv.innerText = `Score: ${state.score}`;   
+    statusDiv.innerText = `Status: ${state.state}${sessionId ? ` • ${isHost ? 'Hosting ' + sessionId : 'Joined ' + sessionId}` : ''}`;
+
+    // Per-player score boxes: lime (host/local) and blue (client)
+    let hostScore = 0;
+    let blueScore = 0;
+    if (Array.isArray(state.snakes)) {
+      const hostSnake = state.snakes.find(s => s && (s.color === 'lime' || s.id === 'host'));
+      const blueSnake = state.snakes.find(s => s && s.color === 'blue');
+      if (hostSnake && hostSnake.segments) hostScore = hostSnake.segments.length;
+      if (blueSnake && blueSnake.segments) blueScore = blueSnake.segments.length;
+    }
+    if (scoreHostDiv) scoreHostDiv.innerText = `Player 1: ${hostScore}`;
+    if (scoreBlueDiv) scoreBlueDiv.innerText = `Player 2: ${blueScore}`;
 
     if (state.state === "gameover") {   
       showGameOver(state.score);
@@ -755,22 +789,21 @@ window.addEventListener("keydown", e => {
     const snake = game.snakesById?.[clientId];
     const wasIdle = game.state === "Waiting";
 
-    // Apply local direction for responsiveness
-    if (snake) {
-      if (e.key === "ArrowUp") snake.setDirection("UP");
-      if (e.key === "ArrowDown") snake.setDirection("DOWN");
-      if (e.key === "ArrowLeft") snake.setDirection("LEFT");
-      if (e.key === "ArrowRight") snake.setDirection("RIGHT");
-      console.log("Set direction on snake id:", clientId, "color:", snake?.color, "to:", dir);
-    }
-
-    // Broadcast input for multiplayer
+    // Compute direction first
     const dir = (
       e.key === 'ArrowUp' ? 'UP' :
       e.key === 'ArrowDown' ? 'DOWN' :
       e.key === 'ArrowLeft' ? 'LEFT' :
       e.key === 'ArrowRight' ? 'RIGHT' : null
     );
+
+    // Apply local direction for responsiveness
+    if (snake && dir) {
+      snake.setDirection(dir);
+      console.log("Set direction on snake id:", clientId, "color:", snake?.color, "to:", dir);
+    }
+
+    // Broadcast input for multiplayer
     if (dir) {
       try { api.game({ type: 'direction', clientId, dir }); } catch {}
       // Om klient trycker pil när spelet väntar, be host starta
