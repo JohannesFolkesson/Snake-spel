@@ -1,6 +1,7 @@
 import { Game } from "./game.js"
 import { MultiplayerApi } from "./MultiplayerApi.js";
 import { Snake } from "./snake.js";
+import { playSound } from "./sounds.js";
 
 const DEFAULT_WS_URL = "wss://mpapi.se/net";
 let api = null;
@@ -51,7 +52,8 @@ const game = new Game({
   width: GRID_WIDTH,
   height: GRID_HEIGHT,
   tickRate: 80,
-  onRender: render
+  onRender: render,
+  onSound: playSound
 })
 
 // Skapa alltid en orm för host (host-läge) eller local (singleplayer)

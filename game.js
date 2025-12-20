@@ -7,10 +7,12 @@ export class Game {
         width = 20,
         height = 20,
         tickRate = 120,
-        onRender = null
+        onRender = null,
+        onSound = null
     } = {}) {
         this.board = new Board(width, height)
         this.onRender = onRender;
+        this.onSound = onSound;
         this.tickRate = tickRate;
         this.baseTickRate = tickRate;
         // Speed-up configuration
@@ -180,6 +182,13 @@ export class Game {
     handleDeath(deadSnake) {
         if (!deadSnake) return;
         deadSnake.alive = false;
+
+        // Play death / collision sound if callback provided
+        try {
+            if (this.onSound) this.onSound('death', deadSnake);
+        } catch (e) {
+            // ignore sound errors
+        }
 
         // Do NOT remove snakes; keep roster for restart
         // End the game only if ALL snakes are dead
