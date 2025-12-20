@@ -76,7 +76,7 @@ export function playGameOverJingle() {
       { f: 220, d: 0.36 },
       { f: 196, d: 0.36 },
       { f: 174, d: 0.5  },
-      { f: 155, d: 0.9  }  // D#3 (resolve)
+      { f: 155, d: 0.9  }
     ];
 
     // create a lowpass filter for the motif to keep things dark
