@@ -73,7 +73,7 @@ export function playGameOverJingle() {
     sub.start(t0); sub.stop(t0 + 1.2);
 
     const notes = [
-      { f: 220, d: 0.36 }, // A3
+      { f: 220, d: 0.36 },
       { f: 196, d: 0.36 }, // G3
       { f: 174, d: 0.5  }, // F3
       { f: 155, d: 0.9  }  // D#3 (resolve)
