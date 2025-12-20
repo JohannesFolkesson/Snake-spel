@@ -79,7 +79,7 @@ export function playGameOverJingle() {
       { f: 155, d: 0.9  }
     ];
 
-    // create a lowpass filter for the motif to keep things dark
+
     const motifFilter = audioCtx.createBiquadFilter();
     motifFilter.type = 'lowpass';
     motifFilter.frequency.setValueAtTime(900, t0 + 0.06);
