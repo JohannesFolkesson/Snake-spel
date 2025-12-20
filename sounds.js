@@ -72,7 +72,6 @@ export function playGameOverJingle() {
     sub.connect(subFilter); subFilter.connect(subG); subG.connect(audioCtx.destination);
     sub.start(t0); sub.stop(t0 + 1.2);
 
-  
     const notes = [
       { f: 220, d: 0.36 }, // A3
       { f: 196, d: 0.36 }, // G3
