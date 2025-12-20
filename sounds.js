@@ -99,7 +99,6 @@ export function playGameOverJingle() {
       g.gain.linearRampToValueAtTime(0.45, t + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, t + n.d + 0.03);
 
-      // mild distortion to add grit
       const shaper = audioCtx.createWaveShaper();
       function makeDistortion(amount) {
         const k = typeof amount === 'number' ? amount : 50;
