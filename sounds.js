@@ -73,7 +73,6 @@ export function playGameOverJingle() {
     sub.start(t0); sub.stop(t0 + 1.2);
 
   
-    // Dark descending motif an octave lower and more detuned
     const notes = [
       { f: 220, d: 0.36 }, // A3
       { f: 196, d: 0.36 }, // G3
