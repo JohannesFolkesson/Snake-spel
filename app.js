@@ -883,6 +883,8 @@ resetBtn.addEventListener("click", () => {
       game.addPlayer(clientId, 'lime');
     }
     game.reset();
+    // Spawn a boost immediately for the host so it appears on new round
+    try { game.spawnBoost(); } catch (e) { console.warn('spawnBoost failed:', e); }
     hideGameOver();
     render();
     // Do NOT auto-start; broadcast restart and wait for input or Start Game
