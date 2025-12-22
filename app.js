@@ -881,6 +881,7 @@ resetBtn.addEventListener("click", () => {
     if (!game.snakesById) game.snakesById = {};
     if (!game.snakesById[clientId]) {
       game.addPlayer(clientId, 'lime');
+      
     }
     game.reset();
     // Spawn a boost immediately for the host so it appears on new round
