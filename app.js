@@ -884,7 +884,7 @@ resetBtn.addEventListener("click", () => {
 
     }
 
-    
+
     game.reset();
     // Spawn a boost immediately for the host so it appears on new round
     try { game.spawnBoost(); } catch (e) { console.warn('spawnBoost failed:', e); }
@@ -894,6 +894,8 @@ resetBtn.addEventListener("click", () => {
     try { api.game({ type: 'restart' }); } catch {}
   } else {
     game.reset();
+    // Spawn boost for single-player as well
+    try { game.spawnBoost(); } catch (e) { console.warn('spawnBoost failed:', e); }
     hideGameOver();
     render();
   }
