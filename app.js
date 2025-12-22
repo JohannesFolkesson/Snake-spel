@@ -295,6 +295,7 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       // reconcileSnakes() behövs ej, vi har redan rätt lista
       console.log('[SYNC] Efter rebuild snakes:', JSON.stringify(game.snakes, null, 2));
       if (snapshot.food) game.food = { x: snapshot.food.x, y: snapshot.food.y };
+      if (snapshot.boost) game.boost = { x: snapshot.boost.x, y: snapshot.boost.y }; else game.boost = null;
       if (typeof snapshot.score === 'number') game.score = snapshot.score;
       render();
       return;
@@ -381,6 +382,7 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       console.log('[SYNC] Efter reconcile snakes:', JSON.stringify(game.snakes, null, 2));
       // Sync food and score
       if (snapshot.food) game.food = { x: snapshot.food.x, y: snapshot.food.y };
+      if (snapshot.boost) game.boost = { x: snapshot.boost.x, y: snapshot.boost.y }; else game.boost = null;
       if (typeof snapshot.score === 'number') game.score = snapshot.score;
       // Ensure rendering
       render();
@@ -476,8 +478,8 @@ function render() {
     ctx.fillRect(0, 0, canvas.width, canvas.height); 
 
    
-    drawFood(state.food.x, state.food.y);
-
+    if (state.food) drawFood(state.food.x, state.food.y);
+    if (state.boost) drawBoost(state.boost.x, state.boost.y);
     // Draw all snakes (local + remote)
     if (Array.isArray(state.snakes)) {
       for (const s of state.snakes) {
@@ -516,8 +518,8 @@ function render() {
           segments: s.segments.map(seg => ({ x: seg.x, y: seg.y }))
         }));
         // Debug: logga vad som skickas ut (som JSON)
-        console.log('[HOST SYNC] Skickar state till klienter:', JSON.stringify({ snakes: snakesPayload, food: state.food, score: state.score }, null, 2));
-        api.game({ type: 'state', snakes: snakesPayload, food: state.food, score: state.score });
+        console.log('[HOST SYNC] Skickar state till klienter:', JSON.stringify({ snakes: snakesPayload, food: state.food, score: state.score, boost: state.boost }, null, 2));
+        api.game({ type: 'state', snakes: snakesPayload, food: state.food, score: state.score, boost: state.boost });
       } catch {}
     }
 }
@@ -609,6 +611,41 @@ function drawFood(x, y) {
   ctx.fillStyle = highlightGradient;
   ctx.beginPath();
   ctx.arc(centerX - radius * 0.4, centerY - radius * 0.4, radius * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawBoost(x, y) {
+  const centerX = x * CELL_SIZE + CELL_SIZE / 2;
+  const centerY = y * CELL_SIZE + CELL_SIZE / 2;
+  const radius = CELL_SIZE / 2 - 2;
+
+  // Glow shadow
+  ctx.fillStyle = "rgba(255, 215, 0, 0.15)";
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius * 1.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Yellow core with radial highlight
+  const g = ctx.createRadialGradient(centerX - radius * 0.3, centerY - radius * 0.3, 0, centerX, centerY, radius);
+  g.addColorStop(0, '#fff6d5');
+  g.addColorStop(0.4, '#ffd44d');
+  g.addColorStop(1, '#ffb020');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius * 0.9, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Bolt symbol
+  ctx.fillStyle = '#222';
+  ctx.beginPath();
+  const s = radius * 0.5;
+  ctx.moveTo(centerX - s * 0.2, centerY - s * 0.9);
+  ctx.lineTo(centerX + s * 0.6, centerY - s * 0.1);
+  ctx.lineTo(centerX + s * 0.1, centerY - s * 0.1);
+  ctx.lineTo(centerX + s * 0.4, centerY + s * 0.9);
+  ctx.lineTo(centerX - s * 0.4, centerY + s * 0.1);
+  ctx.lineTo(centerX + s * 0.1, centerY + s * 0.1);
+  ctx.closePath();
   ctx.fill();
 }
 

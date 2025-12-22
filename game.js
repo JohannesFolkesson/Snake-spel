@@ -27,6 +27,13 @@ export class Game {
 
         this.food = this.board.getRandomEmptyCell(this.snakes);
         this.score = 0;
+        // Speed boost powerup (single spawn)
+        this.boost = null; // { x, y }
+        this.boostDuration = 8000; // ms
+        this.boostMultiplier = 0.5; // multiply tickRate (0.5 => x2 speed)
+        this.boostTimeout = null;
+        this.boostRespawnTimeout = null; // respawn boost after pickup
+        this._prevTickRate = null;
     }
 
     start() {
@@ -63,7 +70,74 @@ export class Game {
         // restore speed settings
         this.tickRate = this.baseTickRate;
         this.nextSpeedThreshold = 10;
+        // clear any active boost and timers
+        if (this.boostTimeout) {
+            clearTimeout(this.boostTimeout);
+            this.boostTimeout = null;
+        }
+        if (this.boostRespawnTimeout) {
+            clearTimeout(this.boostRespawnTimeout);
+            this.boostRespawnTimeout = null;
+        }
+        this.boost = null;
+        this._prevTickRate = null;
         this.state = "Waiting";
+    }
+
+    spawnBoost() {
+        // Place boost on a random empty cell, avoid food and snakes
+        // clear any pending respawn since we're spawning now
+        if (this.boostRespawnTimeout) {
+            clearTimeout(this.boostRespawnTimeout);
+            this.boostRespawnTimeout = null;
+        }
+        const cell = this.board.getRandomEmptyCell(this.snakes, this.food);
+        if (cell) {
+            this.boost = { x: cell.x, y: cell.y };
+        }
+    }
+
+    applySpeedBoost() {
+        // Remove boost pickup
+        this.boost = null;
+        // Save previous rate so we can restore later
+        if (!this._prevTickRate) this._prevTickRate = this.tickRate;
+        // Apply multiplier (smaller tickRate => faster)
+        const newRate = Math.max(this.minTickRate, Math.floor(this.tickRate * this.boostMultiplier));
+        if (newRate < this.tickRate) {
+            this.tickRate = newRate;
+            if (this.interValid) {
+                clearInterval(this.interValid);
+                this.interValid = setInterval(() => { this.tick(); }, this.tickRate);
+            }
+        }
+
+        // Clear existing timeout if present
+        if (this.boostTimeout) clearTimeout(this.boostTimeout);
+        this.boostTimeout = setTimeout(() => {
+            this._restoreSpeed();
+        }, this.boostDuration);
+        // Schedule respawn 20s after pickup
+        if (this.boostRespawnTimeout) clearTimeout(this.boostRespawnTimeout);
+        this.boostRespawnTimeout = setTimeout(() => {
+            this.spawnBoost();
+            this.boostRespawnTimeout = null;
+        }, 20000);
+    }
+
+    _restoreSpeed() {
+        if (this._prevTickRate) {
+            this.tickRate = this._prevTickRate;
+            this._prevTickRate = null;
+            if (this.interValid) {
+                clearInterval(this.interValid);
+                this.interValid = setInterval(() => { this.tick(); }, this.tickRate);
+            }
+        }
+        if (this.boostTimeout) {
+            clearTimeout(this.boostTimeout);
+            this.boostTimeout = null;
+        }
     }
 
     addPlayer(id, color = 'lime') {
@@ -146,13 +220,24 @@ export class Game {
 
         const head = snake.getHead();
 
-        if (head.x === this.food.x && head.y === this.food.y) {
+        if (this.food && head.x === this.food.x && head.y === this.food.y) {
             snake.grow();                        
             this.score = snake.getLength();  
 
             this.food = this.board.getRandomEmptyCell(this.snakes);
             // Possibly increase game speed when reaching thresholds
             this.maybeIncreaseSpeed();
+
+            // Possibly spawn a boost occasionally when food is eaten
+            // (simple rule: 25% chance whenever food is eaten)
+            if (!this.boost && Math.random() < 0.25) {
+                this.spawnBoost();
+            }
+        }
+
+        // Check collision with boost powerup
+        if (this.boost && head.x === this.boost.x && head.y === this.boost.y) {
+            this.applySpeedBoost();
         }
 
         }
@@ -208,7 +293,8 @@ export class Game {
       state: this.state, 
       snakes: this.snakes,
       food: this.food,
-      score: this.score
+            score: this.score,
+            boost: this.boost
     };
   }
 }
