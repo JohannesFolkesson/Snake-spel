@@ -113,7 +113,6 @@ export async function playSound(type) {
     ensureAudio();
     const now = audioCtx.currentTime;
     if (type === 'death') {
-      // Try external licensed track first; fallback to synth if it fails
       const ok = await tryPlayExternalFail();
       if (ok) return;
       // Play a short chiptune-style "game over" jingle (original composition)
