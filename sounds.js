@@ -115,7 +115,6 @@ export async function playSound(type) {
     if (type === 'death') {
       const ok = await tryPlayExternalFail();
       if (ok) return;
-      // Play a short chiptune-style "game over" jingle (original composition)
       playGameOverJingle();
     } else if (type === 'start') {
       // Play an external start MP3 if available, otherwise fall back to a short synth tone
