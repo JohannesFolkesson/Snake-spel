@@ -1,7 +1,7 @@
 import { Game } from "./game.js"
 import { MultiplayerApi } from "./MultiplayerApi.js";
 import { Snake } from "./snake.js";
-import { playSound } from "./sounds.js";
+import { playSound, handleStateSyncForSound } from "./sounds.js";
 
 const DEFAULT_WS_URL = "wss://mpapi.se/net";
 let api = null;
@@ -294,9 +294,16 @@ function handleNetworkEvent(event, messageId, senderId, data) {
       activePlayerIds = ids;
       // reconcileSnakes() behövs ej, vi har redan rätt lista
       console.log('[SYNC] Efter rebuild snakes:', JSON.stringify(game.snakes, null, 2));
-      if (snapshot.food) game.food = { x: snapshot.food.x, y: snapshot.food.y };
-      if (snapshot.boost) game.boost = { x: snapshot.boost.x, y: snapshot.boost.y }; else game.boost = null;
+      const prevFood = game.food ? { x: game.food.x, y: game.food.y } : null;
+      const prevScore = (typeof game.score === 'number') ? game.score : 0;
+
+      game.food = snapshot.food ? { x: snapshot.food.x, y: snapshot.food.y } : null;
+      game.boost = snapshot.boost ? { x: snapshot.boost.x, y: snapshot.boost.y } : null;
       if (typeof snapshot.score === 'number') game.score = snapshot.score;
+
+      // Delegate sound triggers to sounds module (centralize logic)
+      try { handleStateSyncForSound(prevFood, prevScore, snapshot, isHost); } catch (e) {}
+
       render();
       return;
     }

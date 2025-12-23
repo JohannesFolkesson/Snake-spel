@@ -228,6 +228,11 @@ export class Game {
             // which can change from other factors or sync races)
             this.score += 1;
 
+            // Play sound for eat if callback provided
+            try {
+                if (this.onSound) this.onSound('eat', snake);
+            } catch (e) { /* ignore sound errors */ }
+
             // Debug log to help detect unexpected jumps
             if (afterLen - prevLen > 1) {
                 console.warn('[FOOD] Unexpected length jump on eat', { snakeId: snake.id, prevLen, afterLen, growSegments: snake.growSegments });

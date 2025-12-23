@@ -36,18 +36,69 @@ export async function playSound(type) {
       // Play a short chiptune-style "game over" jingle (original composition)
       playGameOverJingle();
     } else if (type === 'eat') {
+      // Chomp/eat sound: short filtered noise burst + a quick bite tone + tiny click
+      const duration = 0.12;
+
+      // Short noise 'crunch' burst
+      const noiseBuffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * duration), audioCtx.sampleRate);
+      const data = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        // Decaying noise envelope baked into the buffer for natural feel
+        data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      }
+      const nb = audioCtx.createBufferSource();
+      nb.buffer = noiseBuffer;
+      const noiseFilter = audioCtx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.setValueAtTime(1800, now);
+      noiseFilter.Q.setValueAtTime(1.2, now);
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.setValueAtTime(0.0001, now);
+      noiseGain.gain.linearRampToValueAtTime(0.18, now + 0.006);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      nb.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(audioCtx.destination);
+      nb.start(now); nb.stop(now + duration);
+
+      // Short tonal 'bite' to give pitch perception of eating
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
       o.type = 'square';
-      o.frequency.setValueAtTime(900, now);
+      o.frequency.setValueAtTime(920, now);
+      o.frequency.exponentialRampToValueAtTime(720, now + duration);
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.linearRampToValueAtTime(0.25, now + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+      g.gain.linearRampToValueAtTime(0.12, now + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
       o.connect(g); g.connect(audioCtx.destination);
-      o.start(now); o.stop(now + 0.12);
+      o.start(now); o.stop(now + duration);
+
+      // Tiny click for sharpness
+      const click = audioCtx.createOscillator();
+      const clickG = audioCtx.createGain();
+      click.type = 'square';
+      click.frequency.setValueAtTime(2600, now);
+      clickG.gain.setValueAtTime(0.0001, now);
+      clickG.gain.linearRampToValueAtTime(0.08, now + 0.002);
+      clickG.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
+      click.connect(clickG); clickG.connect(audioCtx.destination);
+      click.start(now); click.stop(now + 0.03);
     }
   } catch (e) {
     console.warn('Sound play failed', e);
+  }
+}
+
+// Helper: play sounds based on host state sync changes (used by clients)
+export function handleStateSyncForSound(prevFood, prevScore, snapshot, isHost) {
+  try {
+    if (!isHost) {
+      const foodChanged = prevFood && (!snapshot.food || snapshot.food.x !== prevFood.x || snapshot.food.y !== prevFood.y);
+      const scoreIncreased = (typeof snapshot.score === 'number') && snapshot.score > prevScore;
+      if (foodChanged || scoreIncreased) {
+        try { playSound('eat'); } catch (e) { /* ignore */ }
+      }
+    }
+  } catch (e) {
+    console.warn('State sound handling failed', e);
   }
 }
 
