@@ -75,7 +75,6 @@ export async function tryPlayExternalFail() {
         cachedFailAudio = null;
       });
     }
-    // Attempt to play via HTMLAudioElement
     await cachedFailAudio.play();
     return true;
   } catch (e) {
