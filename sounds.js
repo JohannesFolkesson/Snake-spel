@@ -117,7 +117,6 @@ export async function playSound(type) {
       if (ok) return;
       playGameOverJingle();
     } else if (type === 'start') {
-      // Play an external start MP3 if available, otherwise fall back to a short synth tone
       const url = startTrackUrl || './assets/start.mp3';
       try {
         if (!canPlayMime('audio/mpeg')) {
