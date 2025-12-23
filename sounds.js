@@ -12,18 +12,103 @@ export function setFailTrack(url) {
   cachedFailAudio = null;
 }
 
+// Optional external start track (e.g. background/start music when the game begins)
+let startTrackUrl = null;
+let cachedStartAudio = null;
+
+export function setStartTrack(url) {
+  startTrackUrl = url;
+  cachedStartAudio = null;
+} 
+
+// Optional external eat track (user-provided chomp sound)
+let eatTrackUrl = null;
+let cachedEatAudio = null;
+
+export function setEatTrack(url) {
+  eatTrackUrl = url;
+  cachedEatAudio = null;
+} 
+
+// Helper: check if the browser can play a given mime type
+function canPlayMime(mime) {
+  try {
+    const a = new Audio();
+    return !!(a.canPlayType && a.canPlayType(mime));
+  } catch (e) {
+    return false;
+  }
+}
+
+// Short synthesized start tone fallback (used when MP3 missing/unsupported)
+export function playStartTone() {
+  try {
+    ensureAudio();
+    const t = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(440, t);
+    o.frequency.exponentialRampToValueAtTime(660, t + 0.25);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.18, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t); o.stop(t + 0.5);
+  } catch (e) {
+    console.warn('Start tone failed', e);
+  }
+} 
+
 export async function tryPlayExternalFail() {
   const url = failTrackUrl || './assets/mario_fail.mp3';
   try {
-    if (!cachedFailAudio) cachedFailAudio = new Audio(url);
-    // Attempt to play via HTMLAudioElement (handles compressed files easily)
+    // Quick compatibility check: if browser cannot play MP3, skip attempt
+    if (!canPlayMime('audio/mpeg')) {
+      console.warn('MP3 not supported by this browser (fail track).');
+      return false;
+    }
+    if (!cachedFailAudio) {
+      cachedFailAudio = new Audio(url);
+      cachedFailAudio.preload = 'auto';
+      cachedFailAudio.addEventListener('error', (ev) => {
+        console.warn('Fail audio load error', ev);
+        cachedFailAudio = null;
+      });
+    }
+    // Attempt to play via HTMLAudioElement
     await cachedFailAudio.play();
     return true;
   } catch (e) {
     console.warn('External fail audio not available or blocked:', e);
+    cachedFailAudio = null;
     return false;
   }
 }
+
+export async function tryPlayExternalEat() {
+  const url = eatTrackUrl || './assets/eat.mp3';
+  try {
+    if (!canPlayMime('audio/mpeg')) {
+      console.warn('MP3 not supported by this browser (eat track).');
+      return false;
+    }
+    if (!cachedEatAudio) {
+      cachedEatAudio = new Audio(url);
+      cachedEatAudio.preload = 'auto';
+      cachedEatAudio.addEventListener('error', (ev) => {
+        console.warn('Eat audio load error', ev);
+        cachedEatAudio = null;
+      });
+    }
+    await cachedEatAudio.play();
+    return true;
+  } catch (e) {
+    console.warn('External eat audio not available or blocked:', e);
+    cachedEatAudio = null;
+    return false;
+  }
+}  
 
 export async function playSound(type) {
   try {
@@ -35,7 +120,34 @@ export async function playSound(type) {
       if (ok) return;
       // Play a short chiptune-style "game over" jingle (original composition)
       playGameOverJingle();
+    } else if (type === 'start') {
+      // Play an external start MP3 if available, otherwise fall back to a short synth tone
+      const url = startTrackUrl || './assets/start.mp3';
+      try {
+        if (!canPlayMime('audio/mpeg')) {
+          console.warn('MP3 not supported by this browser (start track). Using fallback tone.');
+          playStartTone();
+          return;
+        }
+        if (!cachedStartAudio) {
+          cachedStartAudio = new Audio(url);
+          cachedStartAudio.preload = 'auto';
+          cachedStartAudio.addEventListener('error', (ev) => {
+            console.warn('Start audio load error', ev);
+            cachedStartAudio = null;
+          });
+        }
+        await cachedStartAudio.play();
+      } catch (e) {
+        console.warn('Start audio not available or blocked:', e);
+        // fallback to synth so user hears a sound
+        playStartTone();
+      }
     } else if (type === 'eat') {
+      // Try external eat audio first; if unavailable, use synth fallback
+      const ok = await tryPlayExternalEat();
+      if (ok) return;
+
       // Chomp/eat sound: short filtered noise burst + a quick bite tone + tiny click
       const duration = 0.12;
 

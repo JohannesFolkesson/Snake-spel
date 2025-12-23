@@ -40,6 +40,11 @@ export class Game {
         if(this.interValid) return;
 
         this.state = "Playing";
+        // Play start sound if callback provided
+        try {
+            if (this.onSound) this.onSound('start');
+        } catch (e) { /* ignore sound errors */ }
+
         this.interValid = setInterval(() => {
             this.tick();
 
