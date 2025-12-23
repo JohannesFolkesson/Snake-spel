@@ -63,7 +63,6 @@ export function playStartTone() {
 export async function tryPlayExternalFail() {
   const url = failTrackUrl || './assets/mario_fail.mp3';
   try {
-    // Quick compatibility check: if browser cannot play MP3, skip attempt
     if (!canPlayMime('audio/mpeg')) {
       console.warn('MP3 not supported by this browser (fail track).');
       return false;
