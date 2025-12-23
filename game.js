@@ -221,8 +221,18 @@ export class Game {
         const head = snake.getHead();
 
         if (this.food && head.x === this.food.x && head.y === this.food.y) {
-            snake.grow();                        
-            this.score = snake.getLength();  
+            const prevLen = snake.getLength();
+            snake.grow();
+            const afterLen = snake.getLength();
+            // Increment score by 1 per apple eaten (avoid tying score to snake length
+            // which can change from other factors or sync races)
+            this.score += 1;
+
+            // Debug log to help detect unexpected jumps
+            if (afterLen - prevLen > 1) {
+                console.warn('[FOOD] Unexpected length jump on eat', { snakeId: snake.id, prevLen, afterLen, growSegments: snake.growSegments });
+            }
+            console.log(`[FOOD] Snake ${snake.id} ate food at ${head.x},${head.y} prevLen=${prevLen} afterLen=${afterLen} score=${this.score}`);
 
             this.food = this.board.getRandomEmptyCell(this.snakes);
             // Possibly increase game speed when reaching thresholds

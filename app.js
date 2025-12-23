@@ -490,14 +490,16 @@ function render() {
     // Show game state plus multiplayer session info so Hosting/Joined persists
     statusDiv.innerText = `Status: ${state.state}${sessionId ? ` • ${isHost ? 'Hosting ' + sessionId : 'Joined ' + sessionId}` : ''}`;
 
-    // Per-player score boxes: lime (host/local) and blue (client)
+    // Per-player score boxes: show apples eaten (current length minus starting length)
+    // Default snake starting length is 2 segments, so subtract 2 to get apples eaten.
     let hostScore = 0;
     let blueScore = 0;
+    const START_LENGTH = 2;
     if (Array.isArray(state.snakes)) {
       const hostSnake = state.snakes.find(s => s && (s.color === 'lime' || s.id === 'host'));
       const blueSnake = state.snakes.find(s => s && s.color === 'blue');
-      if (hostSnake && hostSnake.segments) hostScore = hostSnake.segments.length;
-      if (blueSnake && blueSnake.segments) blueScore = blueSnake.segments.length;
+      if (hostSnake && hostSnake.segments) hostScore = Math.max(0, hostSnake.segments.length - START_LENGTH);
+      if (blueSnake && blueSnake.segments) blueScore = Math.max(0, blueSnake.segments.length - START_LENGTH);
     }
     if (scoreHostDiv) scoreHostDiv.innerText = `Player 1: ${hostScore}`;
     if (scoreBlueDiv) scoreBlueDiv.innerText = `Player 2: ${blueScore}`;
