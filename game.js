@@ -111,12 +111,12 @@ export class Game {
                 this.interValid = setInterval(() => { this.tick(); }, this.tickRate);
             }
         }
-        
+
         if (this.boostTimeout) clearTimeout(this.boostTimeout);
         this.boostTimeout = setTimeout(() => {
             this._restoreSpeed();
         }, this.boostDuration);
-        // Schedule respawn 20s after pickup
+    
         if (this.boostRespawnTimeout) clearTimeout(this.boostRespawnTimeout);
         this.boostRespawnTimeout = setTimeout(() => {
             this.spawnBoost();
