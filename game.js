@@ -30,7 +30,7 @@ export class Game {
         // Speed boost powerup (single spawn)
         this.boost = null; // { x, y }
         this.boostDuration = 8000; // ms
-        this.boostMultiplier = 0.6; // multiply tickRate (0.5 => x2 speed)
+        this.boostMultiplier = 0.6;
         this.boostTimeout = null;
         this.boostRespawnTimeout = null;
         this._prevTickRate = null;
