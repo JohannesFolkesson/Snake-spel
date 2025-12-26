@@ -103,7 +103,6 @@ export class Game {
     applySpeedBoost() {
         this.boost = null;
         if (!this._prevTickRate) this._prevTickRate = this.tickRate;
-        // Apply multiplier (smaller tickRate => faster)
         const newRate = Math.max(this.minTickRate, Math.floor(this.tickRate * this.boostMultiplier));
         if (newRate < this.tickRate) {
             this.tickRate = newRate;
