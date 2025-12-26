@@ -32,7 +32,7 @@ export class Game {
         this.boostDuration = 8000; // ms
         this.boostMultiplier = 0.6; // multiply tickRate (0.5 => x2 speed)
         this.boostTimeout = null;
-        this.boostRespawnTimeout = null; // respawn boost after pickup
+        this.boostRespawnTimeout = null;
         this._prevTickRate = null;
     }
 
