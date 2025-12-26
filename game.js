@@ -101,7 +101,6 @@ export class Game {
     }
 
     applySpeedBoost() {
-        // Remove boost pickup
         this.boost = null;
         // Save previous rate so we can restore later
         if (!this._prevTickRate) this._prevTickRate = this.tickRate;
