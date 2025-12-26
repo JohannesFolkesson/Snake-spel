@@ -111,8 +111,7 @@ export class Game {
                 this.interValid = setInterval(() => { this.tick(); }, this.tickRate);
             }
         }
-
-        // Clear existing timeout if present
+        
         if (this.boostTimeout) clearTimeout(this.boostTimeout);
         this.boostTimeout = setTimeout(() => {
             this._restoreSpeed();
