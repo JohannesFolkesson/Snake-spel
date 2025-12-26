@@ -27,7 +27,6 @@ export class Game {
 
         this.food = this.board.getRandomEmptyCell(this.snakes);
         this.score = 0;
-        // Speed boost powerup (single spawn)
         this.boost = null;
         this.boostDuration = 8000;
         this.boostMultiplier = 0.6;
