@@ -192,7 +192,6 @@ export class Game {
             return; 
         }
 
-        // Check collision with other snakes
         for (const otherSnake of this.snakes) {
             if (otherSnake !== snake) {
                 if (otherSnake.segments.some(seg => seg.x === nextHead.x && seg.y === nextHead.y)) {
