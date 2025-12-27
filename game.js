@@ -271,8 +271,7 @@ export class Game {
 
         try {
             if (this.onSound) this.onSound('death', deadSnake);
-        } catch (e) {
-        }
+        } catch (e) {}
 
         // Do NOT remove snakes; keep roster for restart
         // End the game only if ALL snakes are dead
