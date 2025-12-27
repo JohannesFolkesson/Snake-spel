@@ -250,7 +250,6 @@ export class Game {
     }
 
     maybeIncreaseSpeed() {
-        // Increase speed (decrease tickRate) whenever score crosses the next threshold.
         if (typeof this.score !== 'number') return;
         while (this.score >= this.nextSpeedThreshold) {
             const newRate = Math.max(this.minTickRate, Math.floor(this.tickRate * this.speedStepMultiplier));
