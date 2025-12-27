@@ -255,7 +255,7 @@ export class Game {
             const newRate = Math.max(this.minTickRate, Math.floor(this.tickRate * this.speedStepMultiplier));
             if (newRate < this.tickRate) {
                 this.tickRate = newRate;
-                
+
                 if (this.interValid) {
                     clearInterval(this.interValid);
                     this.interValid = setInterval(() => { this.tick(); }, this.tickRate);
@@ -269,7 +269,6 @@ export class Game {
         if (!deadSnake) return;
         deadSnake.alive = false;
 
-        // Play death / collision sound if callback provided
         try {
             if (this.onSound) this.onSound('death', deadSnake);
         } catch (e) {
