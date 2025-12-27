@@ -43,6 +43,26 @@ När GitHub Pages är aktiverat kommer din sida att uppdateras automatiskt varje
 - Kontrollera att `index.html` finns i repository:ets rot
 - Se till att alla JavaScript- och CSS-filer finns på rätt plats
 
+## Custom Domain (Valfritt)
+
+Om du vill använda en egen domän istället för `johannesfolkesson.github.io/Snake-spel/`:
+
+**Viktigt att veta:**
+- Du behöver äga en riktig domän (t.ex. köpt från Namecheap, GoDaddy, etc.)
+- `johannes123.github` är **INTE** en giltig domän - GitHub subdomäner (`*.github.io`) kan inte användas som custom domains
+- Giltiga exempel: `snakegame.com`, `www.mittspel.se`, `spel.johannes.se`
+
+**Steg för custom domain:**
+1. Köp en domän från en domänregistrator
+2. I ditt GitHub repository: Settings → Pages → Custom domain
+3. Ange din domän (t.ex. `snakegame.com`)
+4. Följ GitHubs instruktioner för DNS-konfiguration
+5. Lägg till DNS-records hos din domänregistrator:
+   - För apex domain (snakegame.com): A-records till GitHubs IP-adresser
+   - För subdomain (www.snakegame.com): CNAME till `johannesfolkesson.github.io`
+
+Mer info: https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site
+
 ## Support
 
 Om du har problem, kolla:
