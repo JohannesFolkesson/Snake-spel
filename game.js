@@ -231,7 +231,6 @@ export class Game {
             console.log(`[FOOD] Snake ${snake.id} ate food at ${head.x},${head.y} prevLen=${prevLen} afterLen=${afterLen} score=${this.score}`);
 
             this.food = this.board.getRandomEmptyCell(this.snakes);
-            // Possibly increase game speed when reaching thresholds
             this.maybeIncreaseSpeed();
 
             // Possibly spawn a boost occasionally when food is eaten
