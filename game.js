@@ -234,7 +234,6 @@ export class Game {
             this.maybeIncreaseSpeed();
 
             // Possibly spawn a boost occasionally when food is eaten
-            // (simple rule: 25% chance whenever food is eaten)
             if (!this.boost && Math.random() < 0.25) {
                 this.spawnBoost();
             }
