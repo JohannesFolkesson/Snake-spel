@@ -232,13 +232,12 @@ export class Game {
 
             this.food = this.board.getRandomEmptyCell(this.snakes);
             this.maybeIncreaseSpeed();
-            
+
             if (!this.boost && Math.random() < 0.25) {
                 this.spawnBoost();
             }
         }
 
-        // Check collision with boost powerup
         if (this.boost && head.x === this.boost.x && head.y === this.boost.y) {
             this.applySpeedBoost();
         }
