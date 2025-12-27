@@ -255,7 +255,7 @@ export class Game {
             const newRate = Math.max(this.minTickRate, Math.floor(this.tickRate * this.speedStepMultiplier));
             if (newRate < this.tickRate) {
                 this.tickRate = newRate;
-                // if running, restart interval with new rate
+                
                 if (this.interValid) {
                     clearInterval(this.interValid);
                     this.interValid = setInterval(() => { this.tick(); }, this.tickRate);
