@@ -232,8 +232,7 @@ export class Game {
 
             this.food = this.board.getRandomEmptyCell(this.snakes);
             this.maybeIncreaseSpeed();
-
-            // Possibly spawn a boost occasionally when food is eaten
+            
             if (!this.boost && Math.random() < 0.25) {
                 this.spawnBoost();
             }
