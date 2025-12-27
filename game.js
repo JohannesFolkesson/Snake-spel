@@ -219,8 +219,6 @@ export class Game {
             const prevLen = snake.getLength();
             snake.grow();
             const afterLen = snake.getLength();
-            // Increment score by 1 per apple eaten (avoid tying score to snake length
-            // which can change from other factors or sync races)
             this.score += 1;
 
             // Play sound for eat if callback provided
