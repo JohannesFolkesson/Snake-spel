@@ -140,7 +140,6 @@ export class Game {
     }
 
     addPlayer(id, color = 'lime') {
-        // Prevent duplicates
         if (this.snakesById[id]) {
             console.log("Player already exists:", id);
             return this.snakesById[id];
