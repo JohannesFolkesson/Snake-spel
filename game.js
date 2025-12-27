@@ -273,7 +273,6 @@ export class Game {
             if (this.onSound) this.onSound('death', deadSnake);
         } catch (e) {}
 
-        // End the game only if ALL snakes are dead
         const anyAlive = this.snakes.some(s => s.alive !== false);
         if (!anyAlive) {
             this.state = "gameover";
