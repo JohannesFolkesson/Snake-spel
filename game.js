@@ -272,7 +272,6 @@ export class Game {
         try {
             if (this.onSound) this.onSound('death', deadSnake);
         } catch (e) {
-            // ignore sound errors
         }
 
         // Do NOT remove snakes; keep roster for restart
