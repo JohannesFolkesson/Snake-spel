@@ -201,7 +201,6 @@ export class Game {
                 }
             }
         }
-
         const bodyToCheck = (snake.growSegments > 0)
             ? snake.segments
             : snake.segments.slice(0, snake.segments.length - 1);
