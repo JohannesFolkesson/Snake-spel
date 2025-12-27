@@ -144,7 +144,6 @@ export class Game {
             console.log("Player already exists:", id);
             return this.snakesById[id];
         }
-        // Cap to max 2 players (host + one joiner)
         if (this.snakes.length >= 2) {
             console.log("Max players reached, returning first player:", id);
         }
